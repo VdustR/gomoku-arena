@@ -172,7 +172,7 @@ origin tested — `http://localhost`, `http://127.0.0.1`, `https://localhost`,
 `http://gomoku.localhost`, `https://console.typesafe.ai`, and `null` — with no
 `access-control-allow-origin` header on any of them.
 
-`server/relay.js` forwards one request and keeps no copy of the key. It backs
+`server/relay.ts` forwards one request and keeps no copy of the key. It backs
 both `pnpm dev` (as Vite middleware) and `pnpm start` (as a plain Node
 server), so the two behave identically. It accepts `https`, or `http` on
 localhost; plain http anywhere else takes `GOMOKU_ALLOW_INSECURE_HTTP=true`,
@@ -291,12 +291,12 @@ src/lib/ai/engines.js   Greedy, minimax, and MCTS
 src/lib/ai/heuristic.js Candidate generation and shape scoring
 src/lib/ai/providers.js Provider registry and model adapters
 src/components/         Board, telemetry panel, settings dialog
-server/match.js         Authoritative match state; the only place a stone lands
-server/mcp.js           MCP tools over Streamable HTTP
-server/api.js           Match REST and the browser's event stream
-server/relay.js         Forwards model requests that refuse browser origins
-server/routes.js        One pipeline, shared by the dev server and `pnpm start`
-server/index.js         `pnpm start`: serves dist/ and the routes
+server/match.ts         Authoritative match state; the only place a stone lands
+server/mcp.ts           MCP tools over Streamable HTTP
+server/api.ts           Match REST and the browser's event stream
+server/relay.ts         Forwards model requests that refuse browser origins
+server/routes.ts        One pipeline, shared by the dev server and `pnpm start`
+server/index.ts         `pnpm start`: serves dist/ and the routes
 test/                   Ten suites; see Tests above
 ```
 

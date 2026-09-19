@@ -20,10 +20,12 @@
  * back, turning read-decide-play-wait into a single call.
  */
 
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import {
   MatchError,
   awaitTurn,
@@ -36,7 +38,7 @@ import {
   resetMatch,
   reviewMatch,
   updateMatch,
-} from './match.js'
+} from './match.ts'
 
 const seatArg = z.enum(['black', 'white'])
 const seatConfig = z
@@ -58,22 +60,28 @@ const seatConfig = z
   })
   .optional()
 
-const ok = (payload) => ({
-  content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
-  structuredContent: payload,
+/**
+ * One tool result. The text is what a model reads; `structuredContent` is the
+ * same payload for a client that would rather not parse it back out.
+ */
+const ok = (payload: object): CallToolResult => ({
+  content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
+  // `structuredContent` is declared as an index signature, which an interface
+  // does not satisfy implicitly. The value is the same object either way.
+  structuredContent: payload as Record<string, unknown>,
 })
 
-const failed = (error) => {
+const failed = (error: unknown): CallToolResult => {
   const known = error instanceof MatchError
   return {
     isError: true,
     content: [
       {
-        type: 'text',
+        type: 'text' as const,
         text: JSON.stringify(
           {
             error: known ? error.code : 'internal_error',
-            message: String(error?.message ?? error),
+            message: error instanceof Error ? error.message : String(error),
             ...(known ? error.detail : {}),
           },
           null,
@@ -84,13 +92,23 @@ const failed = (error) => {
   }
 }
 
-const guard = (fn) => async (...args) => {
-  try {
-    return await fn(...args)
-  } catch (error) {
-    return failed(error)
+/**
+ * Turn a thrown `MatchError` into a tool result an agent can read.
+ *
+ * Generic over the handler it wraps so the argument types the SDK infers
+ * from each tool's `inputSchema` survive the wrapping — without that, every
+ * handler's parameters would be `any` and the schemas would describe the
+ * wire and nothing else.
+ */
+const guard =
+  <Args extends unknown[], Result>(fn: (...args: Args) => Promise<Result>) =>
+  async (...args: Args): Promise<Result | CallToolResult> => {
+    try {
+      return await fn(...args)
+    } catch (error) {
+      return failed(error)
+    }
   }
-}
 
 export function buildMcpServer() {
   const server = new McpServer(
@@ -338,14 +356,30 @@ export function buildMcpServer() {
  * `match.js` instead. That is what lets several harnesses act on one board
  * without any of them owning the session.
  */
-export async function handleMcpRequest(req, res, parsedBody) {
-  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined })
+export async function handleMcpRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  parsedBody?: unknown,
+): Promise<void> {
+  /*
+   * Two casts, both at the SDK's edge and neither hiding anything of ours.
+   *
+   * `@modelcontextprotocol/sdk` is not built under
+   * `exactOptionalPropertyTypes`, so it declares properties as optional where
+   * it means "may be explicitly undefined" — and stateless mode is spelled
+   * exactly that way, `sessionIdGenerator: undefined`. The modelling that is
+   * wrong here belongs to the library, so the narrow fix is to say so once
+   * rather than loosen the flag for the whole project.
+   */
+  type TransportOptions = ConstructorParameters<typeof StreamableHTTPServerTransport>[0]
+  const stateless = { sessionIdGenerator: undefined } as unknown as TransportOptions
+  const transport = new StreamableHTTPServerTransport(stateless)
   const server = buildMcpServer()
   res.on('close', () => {
     transport.close().catch(() => {})
     server.close().catch(() => {})
   })
-  await server.connect(transport)
+  await server.connect(transport as Parameters<typeof server.connect>[0])
   await transport.handleRequest(req, res, parsedBody)
 }
 

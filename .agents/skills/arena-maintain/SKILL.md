@@ -9,7 +9,7 @@ description: Change Gomoku Arena itself — the server, the page, the record, or
 
 These are load-bearing. Each one was paid for.
 
-**The move list is the only stored fact.** `server/match.js` writes the moves
+**The move list is the only stored fact.** `server/match.ts` writes the moves
 and nothing derived from them; the board, the side to move, the winner and every
 frame a review steps through are replayed. Storing a board alongside the moves
 would be two copies of one fact, free to disagree after any change. It also
@@ -22,7 +22,7 @@ match and leave no trace in the list they produce, so they are written — and
 the public `status` folds the hold in rather than a second status being kept
 beside the replayed one.
 
-`server/record.js` makes that enforceable rather than conventional. The stored
+`server/record.ts` makes that enforceable rather than conventional. The stored
 schema is strict, so a derived field written alongside the moves fails to load
 instead of waiting for a test to notice. Changing the stored shape means
 bumping `FORMAT_VERSION` and adding a migration for the version you left
@@ -54,7 +54,7 @@ holds that in place.
 **A held call is answered, not dropped.** An agent in `await_turn` or
 `play(wait_ms)` is holding an open HTTP request. A stop that simply exits
 leaves it with a transport error, which is neither of the two cases its
-instructions cover. `releaseWaiters` answers them first, and `server/index.js`
+instructions cover. `releaseWaiters` answers them first, and `server/index.ts`
 calls it on SIGINT and SIGTERM. Anything that ends the process deliberately
 must go through there.
 
@@ -83,7 +83,22 @@ reported as though they had been done badly. Both come out when the last one
 lands.
 
 No `any`. A hard spot is where the modelling is wrong, and the modelling is
-what this is for.
+what this is for. The exception is a library whose own declarations predate
+these settings — the MCP SDK is not built under `exactOptionalPropertyTypes`,
+so two casts sit at its edge with a comment saying whose modelling is wrong.
+
+**Two guarantees the server's types now carry.** Both were checked by breaking
+them on purpose and watching the check fail, which is the only way to know a
+guarantee is one:
+
+- `STATUS` in `server/api.ts` is written `satisfies Record<MatchErrorCode,
+  number>`, so a new refusal code with no status is a compile error rather
+  than a silent 400.
+- `getMatch` returns `MatchState`; only `persist` produces `Saved`, and every
+  function that hands a match back returns `Saved`. A path that changes a
+  match and returns it without writing does not compile. It does not catch a
+  mutation that is dropped rather than returned — that is the refusal path,
+  and `refuse()` is the answer to it: one function, and it writes.
 
 ## The suite
 

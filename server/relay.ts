@@ -15,15 +15,17 @@
  * (as a plain Node server), so the two behave identically.
  */
 
+import type { IncomingMessage, ServerResponse } from 'node:http'
+
 const MAX_BODY_BYTES = 1_000_000
 
 /**
  * Server-side configuration. Unlike `VITE_*`, nothing here reaches the
  * browser, which is why a fallback key may live in one.
  */
-const UPSTREAM_TIMEOUT_MS = Number(process.env.GOMOKU_UPSTREAM_TIMEOUT_MS ?? 60_000) || 60_000
+const UPSTREAM_TIMEOUT_MS = Number(process.env['GOMOKU_UPSTREAM_TIMEOUT_MS'] ?? 60_000) || 60_000
 const ALLOW_INSECURE_HTTP = ['1', 'true', 'yes', 'on'].includes(
-  String(process.env.GOMOKU_ALLOW_INSECURE_HTTP ?? '').trim().toLowerCase(),
+  String(process.env['GOMOKU_ALLOW_INSECURE_HTTP'] ?? '').trim().toLowerCase(),
 )
 
 /**
@@ -32,7 +34,16 @@ const ALLOW_INSECURE_HTTP = ['1', 'true', 'yes', 'on'].includes(
  *   Jev-compatible: POST <base>/systemone   (TypeSafe, localjev, openjev)
  *   OpenAI-compatible: POST <base>/chat/completions
  */
-const ROUTES = {
+interface Route {
+  /** The provider id the page knows this endpoint by. */
+  provider: string
+  /** The path this wire API puts after the caller's base URL. */
+  suffix: string
+  envKey: string
+  envBaseUrl: string
+}
+
+const ROUTES: Record<string, Route> = {
   '/api/jev': {
     provider: 'jev',
     suffix: '/systemone',
@@ -61,8 +72,17 @@ const ROUTES = {
  * half-configured server explains itself instead of failing at the first move
  * with a 500 someone did nothing to deserve.
  */
-function relayCapabilities() {
-  const providers = {}
+export interface ProviderCoverage {
+  canCover: boolean
+  problem: string | null
+}
+
+export interface RelayCapabilities {
+  providers: Record<string, ProviderCoverage>
+}
+
+function relayCapabilities(): RelayCapabilities {
+  const providers: Record<string, ProviderCoverage> = {}
   for (const route of Object.values(ROUTES)) {
     const hasKey = Boolean(process.env[route.envKey])
     const hasBaseUrl = Boolean(process.env[route.envBaseUrl])
@@ -77,7 +97,12 @@ function relayCapabilities() {
   return { providers }
 }
 
-function readJson(req) {
+interface RelayRequest {
+  baseUrl?: unknown
+  request?: unknown
+}
+
+function readJson(req: IncomingMessage): Promise<RelayRequest> {
   return new Promise((resolve, reject) => {
     let raw = ''
     req.on('data', (chunk) => {
@@ -95,7 +120,7 @@ function readJson(req) {
   })
 }
 
-function send(res, status, payload) {
+function send(res: ServerResponse, status: number, payload: unknown): void {
   res.statusCode = status
   res.setHeader('content-type', 'application/json; charset=utf-8')
   res.setHeader('cache-control', 'no-store')
@@ -107,8 +132,8 @@ function send(res, status, payload) {
  * Plain http elsewhere would put the key on the wire in the clear, so it takes
  * a deliberate GOMOKU_ALLOW_INSECURE_HTTP=true to permit it.
  */
-function assertRelayableUrl(value) {
-  let url
+function assertRelayableUrl(value: string): URL {
+  let url: URL
   try {
     url = new URL(value)
   } catch {
@@ -123,7 +148,14 @@ function assertRelayableUrl(value) {
   throw new Error(`unsupported protocol: ${url.protocol}`)
 }
 
-async function forward(res, { url, key, body, timeoutMs = UPSTREAM_TIMEOUT_MS }) {
+interface Forward {
+  url: URL
+  key: string
+  body: unknown
+  timeoutMs?: number
+}
+
+async function forward(res: ServerResponse, { url, key, body, timeoutMs = UPSTREAM_TIMEOUT_MS }: Forward): Promise<void> {
   const abort = new AbortController()
   const timer = setTimeout(() => abort.abort(), timeoutMs)
   const startedAt = performance.now()
@@ -135,7 +167,7 @@ async function forward(res, { url, key, body, timeoutMs = UPSTREAM_TIMEOUT_MS })
       signal: abort.signal,
     })
     const text = await upstream.text()
-    let parsed
+    let parsed: unknown
     try {
       parsed = JSON.parse(text)
     } catch {
@@ -148,7 +180,7 @@ async function forward(res, { url, key, body, timeoutMs = UPSTREAM_TIMEOUT_MS })
       body: parsed,
     })
   } catch (error) {
-    const aborted = error?.name === 'AbortError'
+    const aborted = error instanceof Error && error.name === 'AbortError'
     send(res, aborted ? 504 : 502, {
       ok: false,
       status: aborted ? 504 : 502,
@@ -156,7 +188,9 @@ async function forward(res, { url, key, body, timeoutMs = UPSTREAM_TIMEOUT_MS })
       body: {
         error: aborted
           ? `upstream timed out after ${timeoutMs}ms`
-          : String(error?.message ?? error),
+          : error instanceof Error
+            ? error.message
+            : String(error),
       },
     })
   } finally {
@@ -168,8 +202,8 @@ async function forward(res, { url, key, body, timeoutMs = UPSTREAM_TIMEOUT_MS })
  * Handle one `/api/*` request. Resolves true when it answered, false when the
  * request was not ours and the caller should keep looking.
  */
-export async function handleRelay(req, res) {
-  const path = (req.url ?? '').split('?')[0]
+export async function handleRelay(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
+  const path = (req.url ?? '').split('?')[0] ?? ''
 
   // What the server can supply, asked for once by the page at startup.
   if (path === '/api/relay' && req.method === 'GET') {
@@ -222,22 +256,22 @@ export async function handleRelay(req, res) {
     return true
   }
 
-  let payload
+  let payload: RelayRequest
   try {
     payload = await readJson(req)
   } catch (error) {
-    send(res, 400, { ok: false, body: { error: String(error.message) } })
+    send(res, 400, { ok: false, body: { error: error instanceof Error ? error.message : String(error) } })
     return true
   }
 
-  let endpoint
+  let endpoint: URL
   try {
     const requested = usingServerKey ? pinnedBaseUrl : payload.baseUrl
     const base = String(requested ?? '').replace(/\/+$/, '')
     if (!base) throw new Error('no base URL was given for this endpoint')
     endpoint = assertRelayableUrl(`${base}${route.suffix}`)
   } catch (error) {
-    send(res, 400, { ok: false, body: { error: String(error.message) } })
+    send(res, 400, { ok: false, body: { error: error instanceof Error ? error.message : String(error) } })
     return true
   }
 
