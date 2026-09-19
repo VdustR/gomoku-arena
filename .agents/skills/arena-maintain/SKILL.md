@@ -22,6 +22,15 @@ match and leave no trace in the list they produce, so they are written — and
 the public `status` folds the hold in rather than a second status being kept
 beside the replayed one.
 
+`server/record.js` makes that enforceable rather than conventional. The stored
+schema is strict, so a derived field written alongside the moves fails to load
+instead of waiting for a test to notice. Changing the stored shape means
+bumping `FORMAT_VERSION` and adding a migration for the version you left
+behind; a record from a version with no migration, or from a newer format than
+this server reads, is skipped, said out loud, and **left on disk** — dropping
+somebody's game because it could not be parsed is worse than refusing to show
+it.
+
 **Matches survive a restart.** They once lived only in memory, and editing a
 server file reloads the dev server on its own, which ended a live match between
 two agents mid-game. Anything that mutates a match must reach `persist`.
@@ -51,7 +60,7 @@ must go through there.
 
 ## The suite
 
-`pnpm test` runs nine suites and needs no network. Server-backed suites take a
+`pnpm test` runs ten suites and needs no network. Server-backed suites take a
 free port and their own state directory; a fixed port once meant a leftover
 process answered instead and the suite quietly checked yesterday's code.
 

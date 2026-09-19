@@ -31,6 +31,7 @@ import {
   FORBIDDEN_COPY,
 } from '../src/lib/rules.js'
 import { candidateMoves } from '../src/lib/ai/heuristic.js'
+import { FORMAT_VERSION, readRecord } from './record.js'
 
 const COLUMNS = 'ABCDEFGHJKLMNOPQRSTUVWXYZ'
 /*
@@ -107,6 +108,8 @@ const fileFor = (id) => join(STORE, `${id}.json`)
  * and the match is playable and reviewable again.
  */
 const toStored = (match) => ({
+  // Which shape this is, so a reader never has to infer it from its contents.
+  formatVersion: FORMAT_VERSION,
   id: match.id,
   ruleSet: match.ruleSet,
   seats: match.seats,
@@ -121,6 +124,8 @@ const toStored = (match) => ({
 
 /** Rebuild the derived state by replaying the moves through the same rules. */
 export function replay({ id, ruleSet, seats, history, rejected, rewind, paused, createdAt, updatedAt, version }) {
+  // `formatVersion` is deliberately not destructured: it describes the file,
+  // not the match, and nothing downstream has any use for it.
   const match = {
     id,
     ruleSet,
@@ -169,7 +174,6 @@ export function replay({ id, ruleSet, seats, history, rejected, rewind, paused, 
   return match
 }
 
-const fromStored = (raw) => replay(raw)
 
 function persist(match) {
   try {
@@ -191,7 +195,15 @@ function forget(id) {
   }
 }
 
-/** Read whatever the last run left behind. Called once, at startup. */
+/**
+ * Read whatever the last run left behind. Called once, at startup.
+ *
+ * Every file is checked against the stored schema and its format version
+ * before it becomes a match. One file this server cannot read is one match
+ * it will not show, not a broken store — and it is left where it is and said
+ * out loud, because silently dropping someone's game is worse than refusing
+ * to show it.
+ */
 function restore() {
   let files = []
   try {
@@ -200,17 +212,20 @@ function restore() {
     return
   }
   for (const name of files) {
+    let raw
     try {
-      const match = fromStored(JSON.parse(readFileSync(join(STORE, name), 'utf8')))
-      if (match?.id) matches.set(match.id, match)
+      raw = JSON.parse(readFileSync(join(STORE, name), 'utf8'))
     } catch {
-      // One unreadable file is one lost match, not a broken store.
-      try {
-        rmSync(join(STORE, name), { force: true })
-      } catch {
-        /* nothing to do */
-      }
+      console.warn(`gomoku: skipped ${name} — not readable JSON. Left in place.`)
+      continue
     }
+    const read = readRecord(raw)
+    if (!read.ok) {
+      console.warn(`gomoku: skipped ${name} — ${read.reason}. Left in place.`)
+      continue
+    }
+    const match = replay(read.record)
+    if (match?.id) matches.set(match.id, match)
   }
 }
 

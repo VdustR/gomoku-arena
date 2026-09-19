@@ -48,9 +48,10 @@ src/lib/rules.js        Board, win detection, renju forbidden moves
 src/lib/ai/             Engines, candidate generation, model adapters
 src/components/         Board, control panel, review, settings
 server/match.js         Authoritative match state; the only place a stone lands
+server/record.js        The stored shape, its version, and what a bad file gets
 server/mcp.js           MCP tools over Streamable HTTP
 server/routes.js        One pipeline, shared by the dev server and `pnpm start`
-test/                   Nine suites, no network needed: `pnpm test`
+test/                   Ten suites, no network needed: `pnpm test`
 experiments/            Runnable comparisons, kept out of the suite
 ```
 
