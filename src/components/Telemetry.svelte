@@ -1,15 +1,26 @@
-<script>
+<script lang="ts">
   import { PROVIDERS } from '../lib/ai/providers.ts'
+  import type { RankedMove, Telemetry } from '../lib/ai/contract.ts'
+  import type { PageMove } from '../lib/game.svelte.ts'
+  import type { Side } from '../lib/rules.ts'
 
-  let { telemetry, history, thinking, thinkingFor } = $props()
+  interface Props {
+    telemetry: (Telemetry & { latencyMs: number; color: Side }) | null
+    history: PageMove[]
+    thinking: boolean
+    thinkingFor: Side | null
+  }
 
-  const providerName = (id) => (id === 'human' ? 'You' : (PROVIDERS[id]?.name ?? id))
-  const pct = (weight) => `${Math.round((weight ?? 0) * 100)}%`
+  let { telemetry, history, thinking, thinkingFor }: Props = $props()
+
+  const providerName = (id: string | null | undefined): string =>
+    id === 'human' ? 'You' : (PROVIDERS[id ?? '']?.name ?? id ?? 'unknown')
+  const pct = (weight: number | undefined): string => `${Math.round((weight ?? 0) * 100)}%`
 
   const ranked = $derived(
     (telemetry?.ranked ?? [])
-      .filter((entry) => entry.weight > 0.001)
-      .sort((a, b) => b.weight - a.weight)
+      .filter((entry: RankedMove) => entry.weight > 0.001)
+      .sort((a: RankedMove, b: RankedMove) => b.weight - a.weight)
       .slice(0, 6),
   )
 </script>
@@ -43,16 +54,16 @@
             <dd class="tnum">{telemetry.confidence.toFixed(2)}</dd>
           </div>
         {/if}
-        {#if telemetry.usage?.input_tokens != null}
+        {#if telemetry.usage?.['input_tokens'] != null}
           <div>
             <dt>Input tokens</dt>
-            <dd class="tnum">{telemetry.usage.input_tokens}</dd>
+            <dd class="tnum">{telemetry.usage['input_tokens']}</dd>
           </div>
         {/if}
-        {#if telemetry.usage?.prompt_tokens != null}
+        {#if telemetry.usage?.['prompt_tokens'] != null}
           <div>
             <dt>Prompt tokens</dt>
-            <dd class="tnum">{telemetry.usage.prompt_tokens}</dd>
+            <dd class="tnum">{telemetry.usage['prompt_tokens']}</dd>
           </div>
         {/if}
       </dl>

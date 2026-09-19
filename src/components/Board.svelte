@@ -1,6 +1,25 @@
-<script>
+<script lang="ts">
   import { SIZE, BLACK, WHITE, EMPTY, idx, coordLabel } from '../lib/rules.ts'
   import { moveLegality } from '../lib/rules.ts'
+  import type { Board, Point, RuleSetId, Side } from '../lib/rules.ts'
+  import type { Candidate } from '../lib/ai/heuristic.ts'
+
+  interface Props {
+    board: Board
+    turn: Side
+    ruleSet: RuleSetId
+    lastMove: { x: number; y: number; color: Side } | null
+    winningStones?: Point[]
+    candidates?: Candidate[]
+    thinking?: boolean
+    interactive?: boolean
+    onplay?: (x: number, y: number) => void
+    /** Shown over the board when the next move is this page's to drive. */
+    awaitingStart?: boolean
+    startLabel?: string
+    onstart?: () => void
+    startCaption?: string
+  }
 
   let {
     board,
@@ -17,12 +36,12 @@
     startLabel = 'Start',
     onstart,
     startCaption = '',
-  } = $props()
+  }: Props = $props()
 
   // Geometry in board units; the SVG scales to whatever the layout gives it.
   const PAD = 1.4
   const SPAN = SIZE - 1 + PAD * 2
-  const STAR = [
+  const STAR: readonly Point[] = [
     [3, 3],
     [11, 3],
     [3, 11],
@@ -31,23 +50,33 @@
   ]
   const COLS = 'ABCDEFGHJKLMNOPQRSTUVWXYZ'
 
-  let hover = $state(null)
+  let hover = $state<{ x: number; y: number } | null>(null)
 
   const winSet = $derived(new Set(winningStones.map(([x, y]) => `${x},${y}`)))
-  const candidateSet = $derived(new Map(candidates.map((c, i) => [`${c.x},${c.y}`, i])))
+  const candidateSet = $derived(new Map(candidates.map((c: Candidate, i: number) => [`${c.x},${c.y}`, i])))
+
+  /** One stone as the board draws it, with why it is drawn that way. */
+  interface DrawnStone {
+    key: string
+    x: number
+    y: number
+    color: Side
+    winner: boolean
+    fresh: boolean
+  }
 
   const stones = $derived.by(() => {
-    const placed = []
+    const placed: DrawnStone[] = []
     for (let i = 0; i < SIZE * SIZE; i += 1) {
       const cell = board[i]
-      if (cell === EMPTY) continue
+      if (cell === undefined || cell === EMPTY) continue
       const x = i % SIZE
       const y = Math.floor(i / SIZE)
       placed.push({
         key: `${x},${y}`,
         x,
         y,
-        color: cell,
+        color: cell as Side,
         winner: winSet.has(`${x},${y}`),
         fresh: Boolean(lastMove && lastMove.x === x && lastMove.y === y),
       })
@@ -59,8 +88,10 @@
     hover && interactive ? moveLegality(board, hover.x, hover.y, turn, ruleSet) : null,
   )
 
-  function cellFromEvent(event) {
-    const rect = event.currentTarget.getBoundingClientRect()
+  function cellFromEvent(event: MouseEvent): { x: number; y: number } | null {
+    const target = event.currentTarget
+    if (!(target instanceof Element)) return null
+    const rect = target.getBoundingClientRect()
     const unit = rect.width / SPAN
     const x = Math.round((event.clientX - rect.left) / unit - PAD)
     const y = Math.round((event.clientY - rect.top) / unit - PAD)
@@ -68,19 +99,27 @@
     return { x, y }
   }
 
-  function onmove(event) {
+  function onmove(event: MouseEvent): void {
     hover = interactive ? cellFromEvent(event) : null
   }
 
-  function onclick(event) {
+  function onclick(event: MouseEvent): void {
     if (!interactive) return
     const cell = cellFromEvent(event)
     if (cell) onplay?.(cell.x, cell.y)
   }
 
-  function onkeydown(event) {
+  /** Arrow keys walk the cursor; Enter and Space play where it sits. */
+  const STEPS: Record<string, Point> = {
+    ArrowLeft: [-1, 0],
+    ArrowRight: [1, 0],
+    ArrowUp: [0, -1],
+    ArrowDown: [0, 1],
+  }
+
+  function onkeydown(event: KeyboardEvent): void {
     if (!interactive) return
-    const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key]
+    const step = STEPS[event.key]
     if (step) {
       event.preventDefault()
       const from = hover ?? { x: 7, y: 7 }

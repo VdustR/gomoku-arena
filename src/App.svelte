@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   import Board from './components/Board.svelte'
   import Telemetry from './components/Telemetry.svelte'
   import SettingsDialog from './components/Settings.svelte'
@@ -30,7 +30,7 @@
     AGENT,
     BLACK,
     WHITE,
-  } from './lib/game.svelte.js'
+  } from './lib/game.svelte.ts'
   import { RULE_SETS } from './lib/rules.ts'
   import {
     PROVIDERS,
@@ -41,13 +41,18 @@
     DEFAULT_ENGINE_ID,
     detectBrowserModel,
   } from './lib/ai/providers.ts'
-  import { settings, keyFor } from './lib/settings.svelte.js'
-  import { loadRelayKeys, serverCovers } from './lib/relay.svelte.js'
+  import { settings, keyFor } from './lib/settings.svelte.ts'
+  import { loadRelayKeys, serverCovers } from './lib/relay.svelte.ts'
   import { config } from './lib/config.ts'
 
+  import type { Side } from './lib/rules.ts'
+  import type { ForbiddenCopy } from './lib/rules.ts'
+  import type { BrowserModelState, ProviderMeta } from './lib/ai/providers.ts'
+  import type { MatchPreset } from './lib/config.ts'
+
   let settingsOpen = $state(false)
-  let browserModel = $state(null)
-  let rejection = $state(null)
+  let browserModel = $state<BrowserModelState | null>(null)
+  let rejection = $state<ForbiddenCopy | null>(null)
   /**
    * Take back reaches a player who is not on this screen.
    *
@@ -56,12 +61,12 @@
    * says what it is about to do to them and waits for a second press; with
    * only local players there is nobody to warn, so it acts on the first.
    */
-  let undoArmedAt = $state(null)
+  let undoArmedAt = $state<number | null>(null)
   // Derived rather than held, so a move of any kind retires the warning on
   // its own: it describes a board that is no longer in front of anyone.
   const undoPending = $derived(undoArmedAt !== null && undoArmedAt === game.history.length)
 
-  function onTakeBack() {
+  function onTakeBack(): void {
     if (!hasAgentSeat() || undoPending) {
       undoArmedAt = null
       undoLastPair()
@@ -82,13 +87,16 @@
         browserModel = result
         const preferred =
           result.supported && config.preferBrowserModel ? BROWSER_ID : settings.jevKey ? JEV_ID : DEFAULT_ENGINE_ID
-        for (const color of [BLACK, WHITE]) {
+        for (const color of [BLACK, WHITE] as const) {
           const seat = game.seats[color === BLACK ? 'black' : 'white']
-          if (seat.kind === 'engine') setSeat(color, { kind: 'engine', provider: preferred })
+          if (seat.kind === 'engine') void setSeat(color, { kind: 'engine', provider: preferred })
         }
       })
-      .catch((error) => {
-        game.error = { title: 'Could not reach the server', detail: String(error?.message ?? error) }
+      .catch((error: unknown) => {
+        game.error = {
+          title: 'Could not reach the server',
+          detail: error instanceof Error ? error.message : String(error),
+        }
       })
   })
 
@@ -100,7 +108,7 @@
    * only way a person can tell "this will work" from "this will ask me for a
    * key" before choosing a seat.
    */
-  function keyNoteFor(id) {
+  function keyNoteFor(id: string): string {
     if (keyFor(id)) return 'key in this browser'
     if (serverCovers(id)) return 'key on the server'
     return 'needs a key'
@@ -108,8 +116,8 @@
 
   const availableProviders = $derived(
     Object.values(PROVIDERS)
-      .filter((p) => p.id !== BROWSER_ID || browserModel?.supported)
-      .map((p) => (p.needsKey ? { ...p, note: keyNoteFor(p.id) } : p)),
+      .filter((p: ProviderMeta) => p.id !== BROWSER_ID || browserModel?.supported)
+      .map((p: ProviderMeta) => (p.needsKey ? { ...p, note: keyNoteFor(p.id) } : p)),
   )
 
   /** The seat picker, grouped by what the choice actually costs the player. */
@@ -121,13 +129,13 @@
         { id: AGENT, name: 'Agent over MCP', note: 'plays from a harness' },
       ],
     },
-    ...['search', 'model'].map((group) => ({
+    ...(['search', 'model'] as const).map((group) => ({
       ...PROVIDER_GROUPS[group],
-      options: availableProviders.filter((p) => p.group === group),
+      options: availableProviders.filter((p: ProviderMeta) => p.group === group),
     })),
   ].filter((group) => group.options.length > 0))
 
-  const seatFor = (color) => game.seats[color === BLACK ? 'black' : 'white']
+  const seatFor = (color: Side) => game.seats[color === BLACK ? 'black' : 'white']
   const bothSeatsAi = $derived(seatFor(BLACK).kind === 'engine' && seatFor(WHITE).kind === 'engine')
 
   // Drive whichever in-page engine is seated, once the board settles. A seat
@@ -152,22 +160,22 @@
   const awaitingStart = $derived(
     Boolean(game.matchId) && game.status === 'playing' && !game.armed && seatFor(game.turn).kind === 'engine',
   )
+  const describeSeat = (color: Side): string => {
+    const seat = seatFor(color)
+    if (seat.kind === 'human') return 'You'
+    if (seat.kind === AGENT) return seat.label ?? 'Agent over MCP'
+    return PROVIDERS[seat.provider ?? '']?.name ?? seat.provider ?? 'engine'
+  }
+
   const startLabel = $derived(game.history.length === 0 ? 'Start' : 'Resume')
   /** Who is about to move is the useful part; the button just needs a verb. */
   const startCaption = $derived(
     `${describeSeat(game.turn)} plays ${game.turn === BLACK ? 'black' : 'white'}` +
       (game.history.length === 0 ? ' and opens.' : ' next.'),
   )
-
-  const describeSeat = (color) => {
-    const seat = seatFor(color)
-    if (seat.kind === 'human') return 'You'
-    if (seat.kind === AGENT) return seat.label ?? 'Agent over MCP'
-    return PROVIDERS[seat.provider]?.name ?? seat.provider
-  }
   const matchup = $derived(`${describeSeat(BLACK)} vs ${describeSeat(WHITE)}`)
 
-  async function onplay(x, y) {
+  async function onplay(x: number, y: number): Promise<void> {
     const reason = await playHuman(x, y)
     if (!reason || reason === 'not-your-turn' || reason === 'occupied') {
       rejection = null
@@ -177,12 +185,12 @@
     setTimeout(() => (rejection = null), 3200)
   }
 
-  function preferredEngine() {
+  function preferredEngine(): string {
     if (browserModel?.supported && config.preferBrowserModel) return BROWSER_ID
     return settings.jevKey ? JEV_ID : DEFAULT_ENGINE_ID
   }
 
-  function onSeatChange(color, value) {
+  function onSeatChange(color: Side, value: string): Promise<void> {
     // The banner belongs to the seat that failed; changing it answers the
     // complaint, so leaving it up just reads as a second, stale failure.
     game.error = null
@@ -194,23 +202,33 @@
     return setSeat(color, { kind: 'engine', provider: value, label: PROVIDERS[value]?.name ?? value })
   }
 
-  async function setPreset(preset) {
+  async function setPreset(preset: MatchPreset): Promise<void> {
     await startMatch({ preset })
     const engine = preferredEngine()
-    for (const color of [BLACK, WHITE]) {
+    for (const color of [BLACK, WHITE] as const) {
       if (seatFor(color).kind === 'engine') {
         await setSeat(color, { kind: 'engine', provider: engine, label: PROVIDERS[engine]?.name ?? engine })
       }
     }
   }
 
-  const activePreset = $derived(
+  const activePreset: MatchPreset = $derived(
     seatFor(BLACK).kind === 'human' && seatFor(WHITE).kind === 'human'
       ? 'pvp'
       : bothSeatsAi
         ? 'cvc'
         : 'pvc',
   )
+
+  /** The players the "what can take a seat" section walks through, in order. */
+  const SHOWCASE: ProviderMeta[] = [
+    'greedy',
+    'minimax',
+    'mcts',
+    BROWSER_ID,
+    JEV_ID,
+    OPENAI_ID,
+  ].flatMap((id) => PROVIDERS[id] ?? [])
 
   const outcome = $derived(
     game.status === 'win'
@@ -372,7 +390,7 @@
   <section id="how" class="how">
     <h2>What can take a seat</h2>
     <div class="providers">
-      {#each [PROVIDERS.greedy, PROVIDERS.minimax, PROVIDERS.mcts, PROVIDERS[BROWSER_ID], PROVIDERS[JEV_ID], PROVIDERS[OPENAI_ID]] as provider}
+      {#each SHOWCASE as provider}
         <article class:unavailable={provider.id === BROWSER_ID && browserModel && !browserModel.supported}>
           <h3>{provider.name}</h3>
           <p>{provider.tagline}</p>

@@ -33,12 +33,13 @@
     "noEmit": true,
     "allowImportingTsExtensions": true,
 
-    // The tree is half converted. `allowJs` lets a `.ts` module import a `.js`
-    // one without it becoming `any`; `checkJs` stays off so the modules still
-    // waiting their turn are not reported as if they had been done badly.
-    "allowJs": true,
-    "checkJs": false,
-
+    /*
+     * The conversion is finished, so `allowJs` and `checkJs` are gone: every
+     * module under `src/` and `server/` is TypeScript. What remains in
+     * JavaScript is `svelte.config.js`, which Svelte loads itself, and the
+     * runnable comparisons under `experiments/`, which are `.mjs` scripts
+     * that spend money and stay out of the suite.
+     */
     "skipLibCheck": true
   },
   "include": ["src", "server", "test", "experiments", "scripts", "vite.config.ts"]

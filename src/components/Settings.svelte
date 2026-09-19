@@ -1,11 +1,18 @@
-<script>
-  import { settings, persist, forgetEverything, keyFingerprint } from '../lib/settings.svelte.js'
+<script lang="ts">
+  import { settings, persist, forgetEverything, keyFingerprint } from '../lib/settings.svelte.ts'
   import { PROVIDERS, JEV_ID, OPENAI_ID } from '../lib/ai/providers.ts'
-  import { serverCovers, serverProblem } from '../lib/relay.svelte.js'
+  import { serverCovers, serverProblem } from '../lib/relay.svelte.ts'
 
-  let { open = $bindable(false), browserModel } = $props()
+  import type { BrowserModelState } from '../lib/ai/providers.ts'
 
-  let dialog = $state(null)
+  interface Props {
+    open?: boolean
+    browserModel: BrowserModelState | null
+  }
+
+  let { open = $bindable(false), browserModel }: Props = $props()
+
+  let dialog = $state<HTMLDialogElement | null>(null)
   let revealed = $state({ jev: false, openai: false })
 
   // The three implementations of this wire API, as of writing.
@@ -15,7 +22,7 @@
     { name: 'openjev', baseUrl: 'http://127.0.0.1:8000/v1', model: 'openjev-latest' },
   ]
 
-  function applyJevPreset(preset) {
+  function applyJevPreset(preset: { name: string; baseUrl: string; model: string }): void {
     settings.jevBaseUrl = preset.baseUrl
     settings.jevModel = preset.model
   }
@@ -26,12 +33,12 @@
     if (!open && dialog.open) dialog.close()
   })
 
-  function save() {
+  function save(): void {
     persist()
     open = false
   }
 
-  function forget() {
+  function forget(): void {
     forgetEverything()
     revealed = { jev: false, openai: false }
   }
@@ -57,7 +64,7 @@
 
     <section>
       <div class="head">
-        <h3>{PROVIDERS[JEV_ID].name}</h3>
+        <h3>{PROVIDERS[JEV_ID]?.name}</h3>
         {#if settings.jevKey}
           <span class="fingerprint tnum">{keyFingerprint(settings.jevKey)}</span>
         {:else if serverCovers(JEV_ID)}
@@ -113,7 +120,7 @@
 
     <section>
       <div class="head">
-        <h3>{PROVIDERS[OPENAI_ID].name}</h3>
+        <h3>{PROVIDERS[OPENAI_ID]?.name}</h3>
         {#if settings.openaiKey}
           <span class="fingerprint tnum">{keyFingerprint(settings.openaiKey)}</span>
         {:else if serverCovers(OPENAI_ID)}
@@ -160,7 +167,7 @@
 
     <section class="browser">
       <div class="head">
-        <h3>{PROVIDERS.browser.name}</h3>
+        <h3>{PROVIDERS['browser']?.name}</h3>
         <span class:ready={browserModel?.ready} class:absent={!browserModel?.supported} class="state">
           {browserModel?.state ?? 'checking'}
         </span>
