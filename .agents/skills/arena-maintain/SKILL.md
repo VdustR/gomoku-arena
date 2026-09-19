@@ -60,15 +60,15 @@ must go through there.
 
 ## Types
 
-The tree is moving to TypeScript at the strict settings, module by module, and
-the suite stays green at every step. Three decisions are settled, so do not
-re-open them halfway:
+Everything under `src/` and `server/` is TypeScript at the strict settings.
+`pnpm check` is the command; run it alongside `pnpm test`.
 
-**Vite+ is the type checker.** `vp check` runs the type-aware path through
-tsgolint against `tsconfig.json`; `pnpm check` is the command. There is no
-second toolchain and no `typescript` dependency. This was verified rather than
-assumed — with `lint.options.typeCheck` off, a deliberate
-`const n: number = 'not a number'` passed.
+**Two checkers, because one does not read `.svelte`.** `vp check` runs the
+type-aware path through tsgolint against `tsconfig.json`, and `svelte-check`
+covers the components. Both were verified rather than assumed: with
+`lint.options.typeCheck` off, a deliberate `const n: number = 'not a number'`
+passed `vp check`, and the same line inside a component passed it even with
+type checking on.
 
 **The server runs from source.** Node strips types per file, so
 `node server/index.ts` and the plain-node test suites work with no build step.
@@ -82,11 +82,15 @@ does not. TypeScript's bundler resolution maps a `.js` specifier onto the
 which is exactly how the server came to start only under Vite for one commit.
 Grep for `from '…​.js'` after any rename.
 
-**A converted module keeps working for the ones that have not been converted.**
-`allowJs` is on and `checkJs` is off, so a `.ts` module may import a `.js` one
-without it becoming `any`, and the modules still waiting their turn are not
-reported as though they had been done badly. Both come out when the last one
-lands.
+**`runes: true` is in `svelte.config.js`**, and it is load-bearing for the
+checker rather than for the compiler. Without it `svelte-check` read `$state`
+as a store subscription on a local variable named `state` — ninety-nine errors
+that were all the same misreading. Avoid naming anything `state` in a
+component for the same reason.
+
+**The formatter is not in `pnpm check`.** `vp fmt` wants semicolons and this
+project has none anywhere. Adopting oxfmt is a separate decision about the
+house style, not something a type conversion should have made.
 
 No `any`. A hard spot is where the modelling is wrong, and the modelling is
 what this is for. The exception is a library whose own declarations predate

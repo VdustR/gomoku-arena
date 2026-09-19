@@ -13,17 +13,24 @@
  * Asked once, at startup: it cannot change without the server restarting.
  */
 
-export const relayKeys = $state({
+import type { ProviderCoverage, RelayCapabilities } from '../../server/relay.ts'
+
+export interface RelayKeys {
   /** False until the first answer arrives, so nothing is claimed early. */
+  loaded: boolean
+  providers: Record<string, ProviderCoverage>
+}
+
+export const relayKeys: RelayKeys = $state({
   loaded: false,
   providers: {},
 })
 
-export async function loadRelayKeys() {
+export async function loadRelayKeys(): Promise<RelayKeys> {
   try {
     const response = await fetch('/api/relay')
     if (!response.ok) return relayKeys
-    const payload = await response.json()
+    const payload = (await response.json()) as RelayCapabilities
     relayKeys.providers = payload.providers ?? {}
     relayKeys.loaded = true
   } catch {
@@ -34,11 +41,11 @@ export async function loadRelayKeys() {
 }
 
 /** Can the server play this provider without a key from the browser? */
-export function serverCovers(provider) {
+export function serverCovers(provider: string): boolean {
   return relayKeys.providers[provider]?.canCover === true
 }
 
 /** A server that is half-configured for this provider, and what is missing. */
-export function serverProblem(provider) {
+export function serverProblem(provider: string): string | null {
   return relayKeys.providers[provider]?.problem ?? null
 }

@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   /**
    * The controls, grouped by what they do to the game in front of you.
    *
@@ -15,7 +15,36 @@
   import TurnStatus from './TurnStatus.svelte'
   import { RULE_SETS } from '../lib/rules.ts'
   import { PROVIDERS } from '../lib/ai/providers.ts'
-  import { AGENT, BLACK, WHITE } from '../lib/game.svelte.js'
+  import { AGENT, BLACK, WHITE } from '../lib/game.svelte.ts'
+
+  import type { GameState, PageSeat } from '../lib/game.svelte.ts'
+  import type { MatchSummary, SeatName } from '../../server/match.ts'
+  import type { RuleSetId, Side } from '../lib/rules.ts'
+  import type { MatchPreset } from '../lib/config.ts'
+  import type { ProviderMeta } from '../lib/ai/providers.ts'
+
+  /** One group in the seat picker, as `App.svelte` assembles it. */
+  interface SeatGroup {
+    id: string
+    label: string
+    options: (ProviderMeta | { id: string; name: string; note: string })[]
+  }
+
+  interface Props {
+    game: GameState
+    awaitingStart?: boolean
+    seatOptions: SeatGroup[]
+    activePreset: MatchPreset
+    describeSeat: (color: Side) => string
+    onseatchange: (color: Side, value: string) => void
+    onpreset: (preset: MatchPreset) => void
+    onruleset: (ruleSet: RuleSetId) => void
+    onagain: () => void
+    onclear: () => void
+    onhold: (paused: boolean) => void
+    onlist: () => Promise<MatchSummary[]>
+    onopen: (matchId: string) => void
+  }
 
   let {
     game,
@@ -31,21 +60,22 @@
     onhold,
     onlist,
     onopen,
-  } = $props()
+  }: Props = $props()
 
   /** Earlier games, fetched when asked for rather than polled. */
-  let earlier = $state(null)
+  let earlier = $state<MatchSummary[] | null>(null)
   let copied = $state(false)
 
-  async function toggleEarlier() {
+  async function toggleEarlier(): Promise<void> {
     if (earlier) {
       earlier = null
       return
     }
-    earlier = (await onlist()).filter((m) => m.id !== game.matchId)
+    earlier = (await onlist()).filter((m: MatchSummary) => m.id !== game.matchId)
   }
 
-  async function copyId() {
+  async function copyId(): Promise<void> {
+    if (!game.matchId) return
     try {
       await navigator.clipboard.writeText(game.matchId)
       copied = true
@@ -56,15 +86,24 @@
     }
   }
 
-  const ms = (value) => (value < 60_000 ? `${Math.round(value / 1000)}s` : `${Math.round(value / 60_000)}m`)
-  const ago = (iso) => ms(Math.max(0, Date.now() - Date.parse(iso)))
+  const ms = (value: number): string =>
+    value < 60_000 ? `${Math.round(value / 1000)}s` : `${Math.round(value / 60_000)}m`
+  const ago = (iso: string): string => ms(Math.max(0, Date.now() - Date.parse(iso)))
 
-  const SEATS = [
+  const SEATS: readonly (readonly [Side, string, SeatName])[] = [
     [BLACK, 'Black', 'black'],
     [WHITE, 'White', 'white'],
   ]
 
-  const seatValue = (seat) => (seat.kind === 'engine' ? seat.provider : seat.kind)
+  const seatValue = (seat: PageSeat): string =>
+    seat.kind === 'engine' ? (seat.provider ?? 'engine') : seat.kind
+
+  /** The three ways to seat a new game, and what each one is called. */
+  const PRESETS: readonly (readonly [MatchPreset, string])[] = [
+    ['pvp', 'You vs you'],
+    ['pvc', 'You vs AI'],
+    ['cvc', 'AI vs AI'],
+  ]
   const outcome = $derived(
     game.status === 'win'
       ? `${game.winner === BLACK ? 'Black' : 'White'} won`
@@ -94,7 +133,7 @@
           status={game.status}
           waiting={awaitingStart && game.turn === color}
           since={game.turnSince}
-          providerName={PROVIDERS[game.seats[key].provider]?.name ?? 'engine'}
+          providerName={PROVIDERS[game.seats[key].provider ?? '']?.name ?? 'engine'}
         />
       </div>
     {/each}
@@ -213,7 +252,7 @@
   <div class="divider"></div>
 
   <div class="segmented" role="group" aria-label="New game">
-    {#each [['pvp', 'You vs you'], ['pvc', 'You vs AI'], ['cvc', 'AI vs AI']] as [id, label]}
+    {#each PRESETS as [id, label]}
       <button class:active={activePreset === id} onclick={() => onpreset(id)}>{label}</button>
     {/each}
   </div>

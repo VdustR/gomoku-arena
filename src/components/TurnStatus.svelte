@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   /**
    * Whether anything is actually happening.
    *
@@ -10,7 +10,7 @@
    * the honest version of a progress indicator.
    */
 
-  import { AGENT } from '../lib/game.svelte.js'
+  import { AGENT } from '../lib/game.svelte.ts'
 
   let { seat, seatName, isTurn, thinking, status, since, providerName, waiting = false } = $props()
 
@@ -28,8 +28,14 @@
   const elapsed = $derived(Math.max(0, Math.round((now - since) / 1000)))
   const clock = $derived(elapsed < 60 ? `${elapsed}s` : `${Math.floor(elapsed / 60)}m ${elapsed % 60}s`)
 
-  /** What is true right now, in the words that fit who holds the seat. */
-  const state = $derived.by(() => {
+  /**
+   * What is true right now, in the words that fit who holds the seat.
+   *
+   * Named `readout` rather than `state`: a local `state` makes `$state`
+   * ambiguous with the rune, and the checker reads it as a store
+   * subscription on this variable instead.
+   */
+  const readout = $derived.by(() => {
     if (status !== 'playing') return { kind: 'idle', label: null }
     if (!isTurn) return { kind: 'idle', label: 'waiting' }
     if (waiting) return { kind: 'idle', label: 'ready to start' }
@@ -40,12 +46,12 @@
   })
 </script>
 
-<div class="status" class:busy={state.kind === 'busy'} class:you={state.kind === 'you'}>
-  {#if state.kind === 'busy'}
+<div class="status" class:busy={readout.kind === 'busy'} class:you={readout.kind === 'you'}>
+  {#if readout.kind === 'busy'}
     <span class="pulse" aria-hidden="true"></span>
   {/if}
-  <span class="label">{state.label ?? seatName}</span>
-  {#if state.kind !== 'idle'}
+  <span class="label">{readout.label ?? seatName}</span>
+  {#if readout.kind !== 'idle'}
     <span class="clock tnum">{clock}</span>
   {/if}
 </div>

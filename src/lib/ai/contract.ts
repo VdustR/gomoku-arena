@@ -53,7 +53,23 @@ export interface Telemetry {
   notes?: string
   /** Real token counts, when the endpoint returned them. */
   usage?: Record<string, number>
+  /** A typed endpoint's read of how much danger the position is in. */
+  pressure?: Pressure | null
+  /** Anything else a player wanted kept. Read it with brackets; it is a bag. */
   [figure: string]: unknown
+}
+
+/**
+ * How much danger a player thinks it is in, as a typed endpoint reports it.
+ *
+ * `score` indexes `legend`, and `top` is that entry resolved — kept because
+ * a reader wants the sentence, not the number.
+ */
+export interface Pressure {
+  score: number
+  confidence?: number | undefined
+  legend?: string[] | undefined
+  top?: string | undefined
 }
 
 /** A point on the board, as a player names it. */

@@ -213,11 +213,14 @@ pnpm test
 pnpm check
 ```
 
-`pnpm check` runs Vite+'s format, lint and type checks. Type checking goes
-through tsgolint against `tsconfig.json`, so the strict settings there are
-what is enforced; there is no second toolchain. The tree is part TypeScript
-and part JavaScript while it converts, and the server runs from source either
-way — Node strips types per file, so there is no build step outside the
+`pnpm check` runs the lint and type checks: Vite+'s type-aware path through
+tsgolint for `.ts`, and `svelte-check` for the components, which Vite+ does
+not read. Both go against the strict settings in `tsconfig.json`. The
+formatter is left out on purpose — `vp fmt` wants semicolons and this project
+has none.
+
+Everything under `src/` and `server/` is TypeScript, and the server runs from
+source: Node strips types per file, so there is no build step outside the
 browser bundle.
 
 Ten suites, no network needed:
@@ -285,8 +288,8 @@ mise.toml               Pinned node and pnpm
 index.html              Document head: metadata, fonts, JSON-LD
 src/lib/rules.ts        Board, win detection, renju forbidden moves
 src/lib/config.ts       Build-time configuration from VITE_*
-src/lib/settings.svelte.js  Browser-held settings (localStorage)
-src/lib/game.svelte.js  The page's client of a server-held match
+src/lib/settings.svelte.ts  Browser-held settings (localStorage)
+src/lib/game.svelte.ts  The page's client of a server-held match
 src/lib/ai/engines.ts   Greedy, minimax, and MCTS
 src/lib/ai/heuristic.ts Candidate generation and shape scoring
 src/lib/ai/providers.ts Provider registry and model adapters

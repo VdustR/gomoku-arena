@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   /**
    * Going back through a finished match.
    *
@@ -9,17 +9,28 @@
    * own token use, and the panel does not pretend otherwise.
    */
 
-  let { review, at, onseek, onclose } = $props()
+  import type { Review } from '../../server/match.ts'
 
-  const move = $derived(at > 0 ? review.moves[at - 1] : null)
-  const ms = (value) => (value == null ? '—' : value < 1000 ? `${value} ms` : `${(value / 1000).toFixed(1)} s`)
+  interface Props {
+    review: Review
+    at: number
+    onseek: (index: number) => void
+    onclose: () => void
+  }
 
-  const SOURCE_COPY = {
+  let { review, at, onseek, onclose }: Props = $props()
+
+  const move = $derived(at > 0 ? (review.moves[at - 1] ?? null) : null)
+  const ms = (value: number | null | undefined): string =>
+    value == null ? '—' : value < 1000 ? `${value} ms` : `${(value / 1000).toFixed(1)} s`
+
+  /** Where a figure came from, in the words the reader needs. */
+  const SOURCE_COPY: Record<string, string> = {
     measured: 'measured by the engine or its endpoint',
     reported: 'self-reported, not verifiable here',
   }
 
-  function onkeydown(event) {
+  function onkeydown(event: KeyboardEvent): void {
     if (event.key === 'ArrowLeft') {
       event.preventDefault()
       onseek(at - 1)
