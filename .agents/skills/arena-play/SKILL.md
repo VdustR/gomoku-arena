@@ -64,6 +64,32 @@ cost your turn**: read it and play elsewhere.
 | `overline`, `double-four`, `double-three` | Renju restricts black only. These lose the game if played, so they are refused instead |
 | `not_your_turn` | It is the other seat's move |
 
+## When the board moved under you
+
+Every state and every refusal carries a `version` that counts changes to the
+board. If a refusal's version is not the one you decided against, the position
+changed while you were thinking — that is a different thing from playing badly,
+and the answer is to read the board again rather than retry the point you had
+in mind.
+
+Stones can also be removed. Take back is a control in the browser, and it
+rewinds the board for everyone, including a seat that is not on that screen. A
+refusal that follows one carries `rewound` naming the moves that were taken
+off, and so does the next `get_state`:
+
+```json
+{
+  "error": "not_your_turn",
+  "message": "The board was taken back 2 moves (H8, J9 removed), ...",
+  "version": 3,
+  "moves": 0,
+  "rewound": { "at": "...", "dropped": 2, "points": ["H8", "J9"] }
+}
+```
+
+`rewound` is there only while the take-back is still the most recent change.
+Once a stone lands it stops being the explanation and disappears.
+
 ## Assistance, and when to refuse it
 
 A seat can ask for a ranked shortlist of candidate moves (`assist: "shortlist"`).

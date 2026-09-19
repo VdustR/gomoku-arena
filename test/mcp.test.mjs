@@ -96,6 +96,17 @@ check('and the turn is not consumed', stillWhite.payload.yourTurn, true)
 const outOfTurn = await call(alice, 'play', { match_id: matchId, seat: 'black', point: 'J9' })
 check('playing out of turn is refused', outOfTurn.payload.error, 'not_your_turn')
 
+// A refusal names the position it was judged against, so a player that
+// decided against a different one can tell the board moved from being wrong.
+truthy('a refusal carries the version it was judged against', typeof occupied.payload.version === 'number')
+check(
+  'and that version is the one the board is on',
+  occupied.payload.version,
+  stillWhite.payload.version,
+)
+check('a refusal says how many moves stood on the board', occupied.payload.moves, 1)
+check('nothing is claimed to have been rewound', occupied.payload.rewound, undefined)
+
 const offBoard = await call(bob, 'play', { match_id: matchId, seat: 'white', point: 'Z99' })
 check('a point off the board is refused', offBoard.payload.error, 'bad_point')
 
@@ -204,6 +215,59 @@ check(
   new Set(listed.payload.matches.map((m) => m.id)).size,
   3,
 )
+
+/*
+ * Take back reaches a player who is not on the screen that offers it.
+ *
+ * The control lives in the browser; the seat it rewinds may be held by an
+ * agent that has already decided against the position being removed. The
+ * refusal it then gets has to say the board was rewound, or it reads as
+ * "you played out of turn" and the agent has no reason to look again.
+ */
+const rewindMatch = (await call(alice, 'new_match', {
+  rule_set: 'free',
+  black: { kind: 'human', label: 'someone at the board' },
+  white: { kind: 'agent', label: 'harness-white' },
+})).payload.id
+
+await call(alice, 'play', { match_id: rewindMatch, seat: 'black', point: 'H8' })
+await call(bob, 'play', { match_id: rewindMatch, seat: 'white', point: 'J9' })
+const beforeRewind = (await call(bob, 'get_state', { match_id: rewindMatch, seat: 'white' })).payload
+
+// The human presses Take back in the browser, which is an API call, not MCP.
+const undone = await fetch(`${BASE}/api/match/${rewindMatch}/undo`, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ count: 2 }),
+})
+check('take back answers the page', undone.status, 200)
+
+// The agent plays the move it had already decided on.
+const stale = await call(bob, 'play', { match_id: rewindMatch, seat: 'white', point: 'K10' })
+check('the stale move is still refused', stale.payload.error, 'not_your_turn')
+check('the refusal names the take-back', stale.payload.rewound.dropped, 2)
+check('and the stones it removed', stale.payload.rewound.points, ['H8', 'J9'])
+truthy(
+  'the message describes what happened rather than blaming the player',
+  stale.payload.message.includes('taken back'),
+)
+truthy(
+  'the version has moved past the one the agent decided against',
+  stale.payload.version > beforeRewind.version,
+)
+
+// The next read says the same thing, so an agent that simply looks again sees it.
+const afterRewind = (await call(bob, 'get_state', { match_id: rewindMatch, seat: 'white' })).payload
+check('a read after a take-back says the board was rewound', afterRewind.rewound.dropped, 2)
+check('and the board is empty again', afterRewind.moves, 0)
+
+/*
+ * The claim expires with the next stone. A board that was rewound an hour
+ * and six moves ago is not why a move is being refused now.
+ */
+await call(alice, 'play', { match_id: rewindMatch, seat: 'black', point: 'H8' })
+const movedOn = (await call(bob, 'get_state', { match_id: rewindMatch, seat: 'white' })).payload
+check('once a stone lands the take-back stops being the explanation', movedOn.rewound, undefined)
 
 await alice.close()
 await bob.close()

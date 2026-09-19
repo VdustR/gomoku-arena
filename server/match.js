@@ -89,13 +89,14 @@ const toStored = (match) => ({
   seats: match.seats,
   history: match.history,
   rejected: match.rejected,
+  rewind: match.rewind,
   createdAt: match.createdAt,
   updatedAt: match.updatedAt,
   version: match.version,
 })
 
 /** Rebuild the derived state by replaying the moves through the same rules. */
-export function replay({ id, ruleSet, seats, history, rejected, createdAt, updatedAt, version }) {
+export function replay({ id, ruleSet, seats, history, rejected, rewind, createdAt, updatedAt, version }) {
   const match = {
     id,
     ruleSet,
@@ -107,6 +108,13 @@ export function replay({ id, ruleSet, seats, history, rejected, createdAt, updat
     winner: null,
     winningStones: [],
     rejected: rejected ?? { [BLACK]: [], [WHITE]: [] },
+    /*
+     * The last take-back, if there was one. Not derived: the moves it dropped
+     * are gone from the list, so nothing that survives says they were ever
+     * played. A player refused after one needs to know that happened, which
+     * is why this is a stored event rather than a replayed view.
+     */
+    rewind: rewind ?? null,
     // A turn that was in flight when the server stopped restarts its clock.
     turnStartedAt: Date.now(),
     createdAt,
@@ -182,6 +190,30 @@ export class MatchError extends Error {
     this.code = code
     this.detail = detail
   }
+}
+
+/**
+ * The state a refusal was judged against.
+ *
+ * A player that decided against one position and is refused against another
+ * is not being told it misbehaved — it is being told the board moved. Without
+ * `version` the two read identically, and the player has no reason to look
+ * again before trying the same point.
+ *
+ * `rewound` is attached only while the take-back is still the most recent
+ * thing that happened to the board: once a stone lands the move count moves
+ * past it and this stops claiming it explains anything.
+ */
+function judgedAgainst(match) {
+  const detail = { version: match.version, moves: match.history.length }
+  if (match.rewind && match.rewind.movesAt === match.history.length) {
+    detail.rewound = {
+      at: match.rewind.at,
+      dropped: match.rewind.dropped,
+      points: match.rewind.points,
+    }
+  }
+  return detail
 }
 
 function parsePoint(value) {
@@ -292,6 +324,8 @@ export function createMatch({ ruleSet = 'free', black, white } = {}) {
     turnStartedAt: Date.now(),
     /** Illegal attempts since the current side took the turn. */
     rejected: { [BLACK]: [], [WHITE]: [] },
+    /** The last take-back, while it is still the most recent change. */
+    rewind: null,
     version: 0,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -366,6 +400,19 @@ export function publicMatch(match, { seat = null, includeCandidates = null } = {
       rejected: move.rejected,
     })),
     updatedAt: match.updatedAt,
+  }
+
+  /*
+   * A board that was just rewound looks exactly like one that was never
+   * played that far. Saying so is the only way a player who left a decision
+   * against the old position can tell the difference on its next read.
+   */
+  if (match.rewind && match.rewind.movesAt === match.history.length) {
+    view.rewound = {
+      at: match.rewind.at,
+      dropped: match.rewind.dropped,
+      points: match.rewind.points,
+    }
   }
 
   if (wantCandidates && match.status === 'playing') {
@@ -503,12 +550,17 @@ export function play(matchId, seat, point, { by = null, latencyMs = null, note =
     throw new MatchError('match_over', `This match is already finished: ${match.status}.`, {
       status: match.status,
       winner: match.winner ? seatName(match.winner) : null,
+      ...judgedAgainst(match),
     })
   }
   if (match.turn !== color) {
-    throw new MatchError('not_your_turn', `It is ${seatName(match.turn)}'s move, not ${seat}'s.`, {
-      turn: seatName(match.turn),
-    })
+    const state = judgedAgainst(match)
+    const message = state.rewound
+      ? `The board was taken back ${state.rewound.dropped === 1 ? 'one move' : `${state.rewound.dropped} moves`} ` +
+        `(${state.rewound.points.join(', ')} removed), and it is ${seatName(match.turn)}'s move now, not ${seat}'s. ` +
+        'Read the board again before choosing: the position you decided against is gone.'
+      : `It is ${seatName(match.turn)}'s move, not ${seat}'s.`
+    throw new MatchError('not_your_turn', message, { turn: seatName(match.turn), ...state })
   }
 
   let x
@@ -519,6 +571,7 @@ export function play(matchId, seat, point, { by = null, latencyMs = null, note =
     // A point that does not parse is still something the player tried.
     match.rejected[color].push({ point: String(point), reason: 'bad-point', at: new Date().toISOString() })
     persist(match)
+    error.detail = { ...error.detail, ...judgedAgainst(match) }
     throw error
   }
 
@@ -541,7 +594,11 @@ export function play(matchId, seat, point, { by = null, latencyMs = null, note =
     // A refusal changes no stone, so notify does not run: save it explicitly
     // or the attempt disappears with the next restart.
     persist(match)
-    throw new MatchError('illegal_move', message, { reason: legality.reason, point: coordLabel(x, y) })
+    throw new MatchError('illegal_move', message, {
+      reason: legality.reason,
+      point: coordLabel(x, y),
+      ...judgedAgainst(match),
+    })
   }
 
   const outcome = resolveMove(match.board, x, y, color, match.ruleSet)
@@ -615,6 +672,7 @@ export function undoMove(matchId, { count = 1 } = {}) {
   }
   const drop = Math.min(Math.max(Math.trunc(count) || 1, 1), match.history.length)
   const remaining = match.history.slice(0, -drop)
+  const dropped = match.history.slice(-drop)
 
   match.board = createBoard()
   for (const move of remaining) match.board[idx(move.x, move.y)] = move.color
@@ -625,6 +683,19 @@ export function undoMove(matchId, { count = 1 } = {}) {
   match.turn = remaining.length % 2 === 0 ? BLACK : WHITE
   match.turnStartedAt = Date.now()
   match.rejected = { [BLACK]: [], [WHITE]: [] }
+  /*
+   * Take back is a single-screen control, but a match can have a player who
+   * is not on that screen and is already deciding against the position this
+   * just removed. That player finds out by being refused, so the refusal has
+   * to be able to say what actually happened. `movesAt` is what keeps the
+   * claim honest: it holds only until the next stone lands.
+   */
+  match.rewind = {
+    at: new Date().toISOString(),
+    dropped: drop,
+    points: dropped.map((move) => move.label),
+    movesAt: remaining.length,
+  }
   notify(match)
   return match
 }
@@ -639,6 +710,9 @@ export function resetMatch(matchId) {
   match.history = []
   match.turnStartedAt = Date.now()
   match.rejected = { [BLACK]: [], [WHITE]: [] }
+  // An empty board is not a rewound one, and both have no moves: without
+  // clearing this a reset would inherit the last take-back's explanation.
+  match.rewind = null
   notify(match)
   return match
 }

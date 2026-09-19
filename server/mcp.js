@@ -107,6 +107,12 @@ export function buildMcpServer() {
         'Columns run A-H then J-P; there is no column I. Row 15 is the top.',
         'An illegal move is refused with the reason and does NOT cost your turn: read it and play elsewhere.',
         '',
+        'Every state and every refusal carries a `version` that counts changes to the board.',
+        'If a refusal\u2019s version is not the one you decided against, the board moved under you:',
+        'read it again before choosing, rather than retrying the point you had in mind.',
+        'A take-back can remove stones that were already played. When that is what happened,',
+        'the refusal and the next read both carry `rewound` naming the moves that were removed.',
+        '',
         'Under renju, black additionally may not make an overline, a double four, or a double three.',
         'You will not be told what your opponent was thinking. You see the board, the move list, and nothing else.',
       ].join('\n'),
@@ -151,7 +157,7 @@ export function buildMcpServer() {
     {
       title: 'Read the board',
       description:
-        'The board as an ASCII grid plus the stone lists, whose turn it is, and the move history. Pass your seat to learn whether it is your move.',
+        'The board as an ASCII grid plus the stone lists, whose turn it is, and the move history. Pass your seat to learn whether it is your move. `version` counts changes to this board; `rewound` appears when the last change was a take-back that removed moves.',
       inputSchema: {
         match_id: z.string().describe('From new_match or list_matches.'),
         seat: seatArg.optional().describe('Answer from this seat’s point of view.'),
@@ -198,7 +204,7 @@ export function buildMcpServer() {
     {
       title: 'Play a stone',
       description:
-        'Place a stone for your seat. The point is a label such as H8. An illegal move is refused with a reason and does not cost your turn.',
+        'Place a stone for your seat. The point is a label such as H8. An illegal move is refused with a reason and does not cost your turn. Every refusal carries the `version` it was judged against, and `rewound` when the board had just been taken back \u2014 a version other than the one you decided against means the position changed, not that you misbehaved.',
       inputSchema: {
         match_id: z.string(),
         seat: seatArg,
