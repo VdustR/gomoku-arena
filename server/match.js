@@ -33,7 +33,19 @@ import {
 import { candidateMoves } from '../src/lib/ai/heuristic.js'
 
 const COLUMNS = 'ABCDEFGHJKLMNOPQRSTUVWXYZ'
+/*
+ * Two caps, because the two kinds of record are not worth the same.
+ *
+ * `MAX_MATCHES` is the live working set: games still being played. It used to
+ * be the cap on everything, which meant fifty new boards quietly deleted a
+ * finished game someone meant to review — undoing the promise New game makes
+ * by leaving the previous match behind at its own id.
+ *
+ * A finished record is small, is the one anyone goes back to, and gets a cap
+ * of its own.
+ */
 const MAX_MATCHES = Number(process.env.GOMOKU_MAX_MATCHES ?? 50) || 50
+const MAX_FINISHED = Number(process.env.GOMOKU_MAX_FINISHED ?? 200) || 200
 
 /**
  * What a player could tell us about a move varies by what the player is, so
@@ -47,6 +59,17 @@ const METRIC_SOURCES = new Set(['measured', 'reported'])
 /** Seat names as everyone outside this module spells them. */
 export const SEATS = { black: BLACK, white: WHITE }
 export const seatName = (color) => (color === BLACK ? 'black' : 'white')
+
+/**
+ * The status anyone outside this module sees.
+ *
+ * `match.status` is replayed from the moves and only ever says how the game
+ * stands. A hold is not in the moves, so it is stored separately and folded
+ * in here: a game waiting for a player who is coming back reads as held
+ * rather than as one nobody has touched for an hour.
+ */
+export const statusOf = (match) =>
+  match.paused && match.status === 'playing' ? 'paused' : match.status
 
 /*
  * Matches survive a restart.
@@ -90,13 +113,14 @@ const toStored = (match) => ({
   history: match.history,
   rejected: match.rejected,
   rewind: match.rewind,
+  paused: match.paused,
   createdAt: match.createdAt,
   updatedAt: match.updatedAt,
   version: match.version,
 })
 
 /** Rebuild the derived state by replaying the moves through the same rules. */
-export function replay({ id, ruleSet, seats, history, rejected, rewind, createdAt, updatedAt, version }) {
+export function replay({ id, ruleSet, seats, history, rejected, rewind, paused, createdAt, updatedAt, version }) {
   const match = {
     id,
     ruleSet,
@@ -115,6 +139,12 @@ export function replay({ id, ruleSet, seats, history, rejected, rewind, createdA
      * is why this is a stored event rather than a replayed view.
      */
     rewind: rewind ?? null,
+    /*
+     * A hold someone put on this game, if there is one. Also not derived: a
+     * game waiting for a player who is coming back and one abandoned an hour
+     * ago have the same move list, and only this tells them apart.
+     */
+    paused: paused ?? null,
     // A turn that was in flight when the server stopped restarts its clock.
     turnStartedAt: Date.now(),
     createdAt,
@@ -265,10 +295,11 @@ function notify(match) {
     const key = `${match.id}:${color}`
     const queue = waiters.get(key)
     if (!queue?.length) continue
-    // Wake a seat when it is that seat's move, or when the game has ended.
-    if (match.status !== 'playing' || match.turn === color) {
+    // Wake a seat when it is that seat's move, or when the game is no longer
+    // running — which now includes being put on hold.
+    if (statusOf(match) !== 'playing' || match.turn === color) {
       waiters.delete(key)
-      for (const resolve of queue) resolve()
+      for (const wake of queue) wake()
     }
   }
 
@@ -279,17 +310,55 @@ function notify(match) {
       // A dead stream is dropped by its own close handler.
     }
   }
+
+  // A match crosses from one class to the other when it ends or goes on hold,
+  // so both caps are checked here rather than only when a board is opened.
+  evictOldest(match.id)
 }
 
-function evictOldest() {
-  while (matches.size > MAX_MATCHES) {
-    let oldest = null
-    for (const match of matches.values()) {
-      if (!oldest || match.updatedAt < oldest.updatedAt) oldest = match
-    }
-    if (!oldest) break
-    forget(oldest.id)
+const isFinished = (match) => match.status === 'win' || match.status === 'draw'
+
+/**
+ * What to lose first when a class is over its cap.
+ *
+ * An empty board nobody ever played is the cheapest thing in the store. A
+ * game on hold outranks both, whether or not a stone has been played on it:
+ * somebody said they were coming back to it, and that is the whole point of
+ * the hold. Within a tier the least recently updated goes first.
+ */
+const evictionTier = (match) => {
+  if (statusOf(match) === 'paused') return 2
+  return match.history.length === 0 ? 0 : 1
+}
+
+function trim(candidates, cap, keepId, rank) {
+  let over = candidates.length - cap
+  if (over <= 0) return
+  const doomed = candidates
+    .filter((match) => match.id !== keepId)
+    .sort((a, b) => rank(a) - rank(b) || a.updatedAt.localeCompare(b.updatedAt))
+  for (const match of doomed) {
+    if (over <= 0) break
+    forget(match.id)
+    over -= 1
   }
+}
+
+/**
+ * Keep the store bounded without deleting the games worth keeping.
+ *
+ * The two classes are capped separately. A burst of new boards can no longer
+ * reach a finished record, which is the one someone opened New game expecting
+ * to be able to go back to.
+ *
+ * `keepId` is the match that just changed. Without it a new board under a
+ * tight cap could be the cheapest thing in the store and be deleted by the
+ * very call that created it, leaving the caller holding an id for nothing.
+ */
+function evictOldest(keepId = null) {
+  const all = [...matches.values()]
+  trim(all.filter((match) => !isFinished(match)), MAX_MATCHES, keepId, evictionTier)
+  trim(all.filter(isFinished), MAX_FINISHED, keepId, () => 0)
 }
 
 function normalizeSeat(seat = {}) {
@@ -326,13 +395,15 @@ export function createMatch({ ruleSet = 'free', black, white } = {}) {
     rejected: { [BLACK]: [], [WHITE]: [] },
     /** The last take-back, while it is still the most recent change. */
     rewind: null,
+    /** A hold someone put on this game, or null. */
+    paused: null,
     version: 0,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   }
   matches.set(match.id, match)
   persist(match)
-  evictOldest()
+  evictOldest(match.id)
   return match
 }
 
@@ -348,7 +419,7 @@ export function listMatches() {
     .map((match) => ({
       id: match.id,
       ruleSet: match.ruleSet,
-      status: match.status,
+      status: statusOf(match),
       turn: seatName(match.turn),
       moves: match.history.length,
       seats: {
@@ -374,11 +445,12 @@ export function publicMatch(match, { seat = null, includeCandidates = null } = {
     version: match.version,
     ruleSet: match.ruleSet,
     ruleSummary: RULE_SETS[match.ruleSet].blurb,
-    status: match.status,
+    status: statusOf(match),
+    paused: match.paused,
     winner: match.winner ? seatName(match.winner) : null,
     winningStones: match.winningStones.map(([x, y]) => coordLabel(x, y)),
     turn: seatName(match.turn),
-    yourTurn: color ? match.status === 'playing' && match.turn === color : null,
+    yourTurn: color ? statusOf(match) === 'playing' && match.turn === color : null,
     seats: { black: match.seats[BLACK], white: match.seats[WHITE] },
     moves: match.history.length,
     board: {
@@ -415,7 +487,7 @@ export function publicMatch(match, { seat = null, includeCandidates = null } = {
     }
   }
 
-  if (wantCandidates && match.status === 'playing') {
+  if (wantCandidates && statusOf(match) === 'playing') {
     const forColor = color ?? match.turn
     view.candidates = candidateMoves(match.board, forColor, match.ruleSet).map((c) => ({
       point: c.label,
@@ -501,7 +573,7 @@ export function reviewMatch(matchId) {
   return {
     id: match.id,
     ruleSet: match.ruleSet,
-    status: match.status,
+    status: statusOf(match),
     winner: match.winner ? seatName(match.winner) : null,
     winningStones: match.winningStones.map(([x, y]) => coordLabel(x, y)),
     startedAt: match.createdAt,
@@ -546,6 +618,14 @@ export function play(matchId, seat, point, { by = null, latencyMs = null, note =
   const match = getMatch(matchId)
   const color = SEATS[seat]
   if (!color) throw new MatchError('bad_seat', `Unknown seat: ${seat}. Use "black" or "white".`)
+  if (statusOf(match) === 'paused') {
+    throw new MatchError(
+      'match_paused',
+      `This match is on hold${match.paused.by ? `, put there by ${match.paused.by}` : ''}` +
+        `${match.paused.note ? `: ${match.paused.note}` : ''}. Resume it before playing.`,
+      { paused: match.paused, ...judgedAgainst(match) },
+    )
+  }
   if (match.status !== 'playing') {
     throw new MatchError('match_over', `This match is already finished: ${match.status}.`, {
       status: match.status,
@@ -730,36 +810,84 @@ export function updateMatch(matchId, { ruleSet, black, white } = {}) {
 }
 
 /**
- * Resolve once it is this seat's move, or the match ends, or the wait times
- * out. MCP servers cannot call their clients, so an agent waiting for its
- * opponent holds one call open here instead of polling.
+ * Put a match on hold, or take it off hold.
+ *
+ * Surviving a restart is not the same as resuming one. A game waiting for a
+ * player who is coming back and a game abandoned an hour ago have the same
+ * move list and, until this existed, the same status — so anyone looking at
+ * either saw a live match that was not moving. A hold says which it is.
+ */
+export function pauseMatch(matchId, { paused = true, by = null, note = null } = {}) {
+  const match = getMatch(matchId)
+  if (match.status !== 'playing') {
+    throw new MatchError('match_over', `This match is already finished: ${match.status}.`, {
+      status: match.status,
+      ...judgedAgainst(match),
+    })
+  }
+  match.paused = paused
+    ? {
+        at: new Date().toISOString(),
+        by: by ? String(by).slice(0, 60) : null,
+        note: note ? String(note).slice(0, 200) : null,
+      }
+    : null
+  notify(match)
+  return match
+}
+
+/**
+ * Resolve once it is this seat's move, or the match stops running, or the
+ * wait times out. MCP servers cannot call their clients, so an agent waiting
+ * for its opponent holds one call open here instead of polling.
  */
 export function awaitTurn(matchId, seat, timeoutMs = 120_000) {
   const match = getMatch(matchId)
   const color = SEATS[seat]
   if (!color) throw new MatchError('bad_seat', `Unknown seat: ${seat}.`)
-  if (match.status !== 'playing' || match.turn === color) {
-    return Promise.resolve({ timedOut: false })
+  if (statusOf(match) !== 'playing' || match.turn === color) {
+    return Promise.resolve({ timedOut: false, interrupted: null })
   }
 
   const key = `${matchId}:${color}`
   return new Promise((resolve) => {
     const queue = waiters.get(key) ?? []
     let timer = null
-    const done = (timedOut) => {
+    const done = (timedOut, interrupted = null) => {
       if (timer) clearTimeout(timer)
       const remaining = waiters.get(key)
       if (remaining) {
         const at = remaining.indexOf(wake)
         if (at !== -1) remaining.splice(at, 1)
       }
-      resolve({ timedOut })
+      resolve({ timedOut, interrupted })
     }
-    const wake = () => done(false)
+    const wake = (interrupted = null) => done(false, interrupted)
     queue.push(wake)
     waiters.set(key, queue)
     timer = setTimeout(() => done(true), Math.min(Math.max(timeoutMs, 1000), 600_000))
   })
+}
+
+/**
+ * Answer every held call before the process goes away.
+ *
+ * A held `await_turn` or `play(wait_ms)` is an open HTTP request. When the
+ * server stops under it the request fails at the transport, and the caller
+ * gets an error that is neither "slow opponent" nor "match gone" — the only
+ * two cases its instructions cover. Released here it gets an ordinary answer
+ * that says why the wait ended and that the match is still there.
+ *
+ * This covers a stop the process is told about. A crash or a killed socket
+ * still drops the call, which is why a dropped held call means ask again.
+ */
+export function releaseWaiters(reason = 'server_stopping') {
+  const held = [...waiters.entries()]
+  waiters.clear()
+  for (const [, queue] of held) {
+    for (const wake of queue) wake(reason)
+  }
+  return held.reduce((count, [, queue]) => count + queue.length, 0)
 }
 
 /** Subscribe to a match. Returns an unsubscribe function. */

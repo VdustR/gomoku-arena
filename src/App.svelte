@@ -16,6 +16,7 @@
     undoLastPair,
     takeBackCount,
     hasAgentSeat,
+    holdMatch,
     stopThinking,
     forbiddenCopyFor,
     arm,
@@ -198,7 +199,9 @@
       ? `${game.winner === BLACK ? 'Black' : 'White'} wins`
       : game.status === 'draw'
         ? 'Draw — the board is full'
-        : null,
+        : game.status === 'paused'
+          ? 'On hold'
+          : null,
   )
 </script>
 
@@ -291,6 +294,7 @@
         onruleset={setRuleSet}
         onagain={playAgain}
         onclear={resetGame}
+        onhold={holdMatch}
         onlist={listMatches}
         onopen={joinMatch}
       />

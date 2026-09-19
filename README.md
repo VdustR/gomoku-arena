@@ -155,7 +155,9 @@ The rest stay on the server and never reach the page:
 | `GOMOKU_OPENAI_BASE_URL` | unset | Required with `GOMOKU_OPENAI_KEY` |
 | `GOMOKU_UPSTREAM_TIMEOUT_MS` | `60000` | How long the relay waits upstream |
 | `GOMOKU_ALLOW_INSECURE_HTTP` | `false` | Permit plain http to a non-loopback endpoint |
-| `GOMOKU_MAX_MATCHES` | `50` | Matches kept before the oldest is evicted |
+| `GOMOKU_MAX_MATCHES` | `50` | Unfinished matches kept; boards nobody played go first, then idle games, then games on hold |
+| `GOMOKU_MAX_FINISHED` | `200` | Finished records kept, capped separately so new boards cannot evict a game you meant to review |
+| `GOMOKU_SHUTDOWN_GRACE_MS` | `250` | How long `pnpm start` waits for held calls to be answered before closing |
 | `GOMOKU_STATE_DIR` | `.matches/` | Where match records are written |
 
 ## Why a server is required
@@ -206,7 +208,7 @@ file. `CLAUDE.md` is a symlink to `AGENTS.md` for the same reason.
 pnpm test
 ```
 
-Six suites, no network needed:
+Nine suites, no network needed:
 
 | Suite | Covers |
 | --- | --- |
@@ -214,8 +216,11 @@ Six suites, no network needed:
 | `test/config.test.mjs` | Env readers, including that an unset variable falls back rather than parsing as zero |
 | `test/engines.test.mjs` | Each search engine takes a win, blocks a loss, and never offers a forbidden move |
 | `test/providers.test.mjs` | Reading a move index out of whatever a model replied with |
+| `test/review.test.mjs` | What a finished game reports, and which figures keep their source |
+| `test/persistence.test.mjs` | A match replayed from its file alone, across three servers, and what is not written |
+| `test/lifecycle.test.mjs` | What is evicted and what is kept, and a held call answered when the server stops |
 | `test/relay.test.mjs` | Key handling, endpoint pinning, and route ownership, against a live server |
-| `test/mcp.test.mjs` | Two MCP clients on one board, turn waiting, and what stays hidden from an opponent |
+| `test/mcp.test.mjs` | Two MCP clients on one board, turn waiting, holds, and what stays hidden from an opponent |
 
 ## How a move is chosen
 
@@ -279,7 +284,7 @@ server/api.js           Match REST and the browser's event stream
 server/relay.js         Forwards model requests that refuse browser origins
 server/routes.js        One pipeline, shared by the dev server and `pnpm start`
 server/index.js         `pnpm start`: serves dist/ and the routes
-test/                   Six suites; see Tests above
+test/                   Nine suites; see Tests above
 ```
 
 ## References
