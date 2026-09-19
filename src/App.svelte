@@ -40,10 +40,10 @@
     OPENAI_ID,
     DEFAULT_ENGINE_ID,
     detectBrowserModel,
-  } from './lib/ai/providers.js'
+  } from './lib/ai/providers.ts'
   import { settings, keyFor } from './lib/settings.svelte.js'
   import { loadRelayKeys, serverCovers } from './lib/relay.svelte.js'
-  import { config } from './lib/config.js'
+  import { config } from './lib/config.ts'
 
   let settingsOpen = $state(false)
   let browserModel = $state(null)

@@ -4,7 +4,7 @@
  * a formatting quirk from ending the turn.
  */
 
-import { parseChoiceIndex } from '../src/lib/ai/providers.js'
+import { parseChoiceIndex } from '../src/lib/ai/providers.ts'
 
 let pass = 0
 let fail = 0

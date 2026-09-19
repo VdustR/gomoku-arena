@@ -252,7 +252,7 @@ comparison between them is like-for-like.
 
 ## Adding a provider
 
-A provider is one async function in `src/lib/ai/providers.js`. It receives the
+A provider is one async function in `src/lib/ai/providers.ts`. It receives the
 position and the shortlist, and returns the chosen candidate plus whatever it
 can say about the decision:
 
@@ -284,12 +284,12 @@ board, the rules, or the UI is specific to any one vendor.
 mise.toml               Pinned node and pnpm
 index.html              Document head: metadata, fonts, JSON-LD
 src/lib/rules.ts        Board, win detection, renju forbidden moves
-src/lib/config.js       Build-time configuration from VITE_*
+src/lib/config.ts       Build-time configuration from VITE_*
 src/lib/settings.svelte.js  Browser-held settings (localStorage)
 src/lib/game.svelte.js  The page's client of a server-held match
-src/lib/ai/engines.js   Greedy, minimax, and MCTS
-src/lib/ai/heuristic.js Candidate generation and shape scoring
-src/lib/ai/providers.js Provider registry and model adapters
+src/lib/ai/engines.ts   Greedy, minimax, and MCTS
+src/lib/ai/heuristic.ts Candidate generation and shape scoring
+src/lib/ai/providers.ts Provider registry and model adapters
 src/components/         Board, telemetry panel, settings dialog
 server/match.ts         Authoritative match state; the only place a stone lands
 server/mcp.ts           MCP tools over Streamable HTTP
@@ -304,7 +304,7 @@ test/                   Ten suites; see Tests above
 
 The search engines implement published algorithms. The papers are the source of
 the method, not of the code: nothing here is copied from another
-implementation, and `src/lib/ai/engines.js` says so at the point where each one
+implementation, and `src/lib/ai/engines.ts` says so at the point where each one
 is defined.
 
 - **Alpha-beta pruning** — D. E. Knuth and R. W. Moore, [An analysis of

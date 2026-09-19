@@ -31,7 +31,7 @@ import {
   FORBIDDEN_COPY,
 } from '../src/lib/rules.ts'
 import type { Board, IllegalReason, Point, RuleSetId, Side } from '../src/lib/rules.ts'
-import { candidateMoves } from '../src/lib/ai/heuristic.js'
+import { candidateMoves } from '../src/lib/ai/heuristic.ts'
 import { FORMAT_VERSION, readRecord } from './record.ts'
 import type { Hold, Rewind, StoredMatch, StoredMetrics, StoredMove, StoredRefusal, StoredSeat } from './record.ts'
 

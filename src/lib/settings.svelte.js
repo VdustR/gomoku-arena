@@ -7,12 +7,12 @@
  * Clearing the field, or Forget everything, removes it.
  */
 
-import { config } from './config.js'
+import { config } from './config.ts'
 
 const STORAGE_KEY = config.storageKey
 
 // Endpoints default to whatever the build was configured with; a key never
-// does. See src/lib/config.js.
+// does. See src/lib/config.ts.
 const BLANK = {
   jevKey: '',
   jevBaseUrl: config.jev.baseUrl,

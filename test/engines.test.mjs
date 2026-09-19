@@ -7,7 +7,7 @@
  */
 
 import { BLACK, WHITE, createBoard, idx, moveLegality, makesFive } from '../src/lib/rules.ts'
-import { ENGINES } from '../src/lib/ai/engines.js'
+import { ENGINES } from '../src/lib/ai/engines.ts'
 
 let pass = 0
 let fail = 0

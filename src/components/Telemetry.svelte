@@ -1,5 +1,5 @@
 <script>
-  import { PROVIDERS } from '../lib/ai/providers.js'
+  import { PROVIDERS } from '../lib/ai/providers.ts'
 
   let { telemetry, history, thinking, thinkingFor } = $props()
 
