@@ -12,11 +12,15 @@
 
   import { AGENT } from '../lib/game.svelte.js'
 
-  let { seat, seatName, isTurn, thinking, status, since, providerName } = $props()
+  let { seat, seatName, isTurn, thinking, status, since, providerName, waiting = false } = $props()
 
   let now = $state(Date.now())
   $effect(() => {
-    if (!isTurn || status !== 'playing') return
+    // Nothing is being thought about before the match is started, so nothing
+    // should be counted. A clock running then is a fabricated measurement, and
+    // it is the same readout that reports real thinking time once a game is
+    // under way.
+    if (!isTurn || waiting || status !== 'playing') return
     const tick = setInterval(() => (now = Date.now()), 250)
     return () => clearInterval(tick)
   })
@@ -28,6 +32,7 @@
   const state = $derived.by(() => {
     if (status !== 'playing') return { kind: 'idle', label: null }
     if (!isTurn) return { kind: 'idle', label: 'waiting' }
+    if (waiting) return { kind: 'idle', label: 'ready to start' }
     if (seat.kind === 'human') return { kind: 'you', label: 'your move' }
     if (seat.kind === AGENT) return { kind: 'busy', label: `${seat.label ?? 'agent'} is on move` }
     if (thinking) return { kind: 'busy', label: `${providerName} is thinking` }

@@ -17,6 +17,8 @@
     stopThinking,
     forbiddenCopyFor,
     arm,
+    playAgain,
+    listMatches,
     loadReview,
     closeReview,
     seekReview,
@@ -48,10 +50,7 @@
     const fromUrl = new URLSearchParams(location.hash.slice(1)).get('match')
     const opening = fromUrl ? joinMatch(fromUrl).catch(() => startMatch()) : startMatch()
     opening
-      .then((view) => {
-        location.hash = `match=${view.id}`
-        return detectBrowserModel()
-      })
+      .then(() => detectBrowserModel())
       .then((result) => {
         browserModel = result
         const preferred =
@@ -151,8 +150,7 @@
   }
 
   async function setPreset(preset) {
-    const view = await startMatch({ preset })
-    location.hash = `match=${view.id}`
+    await startMatch({ preset })
     const engine = preferredEngine()
     for (const color of [BLACK, WHITE]) {
       if (seatFor(color).kind === 'engine') {
@@ -258,13 +256,17 @@
     <div class="controls">
       <MatchPanel
         {game}
+        {awaitingStart}
         {seatOptions}
         {activePreset}
         {describeSeat}
         onseatchange={onSeatChange}
         onpreset={setPreset}
         onruleset={setRuleSet}
+        onagain={playAgain}
         onclear={resetGame}
+        onlist={listMatches}
+        onopen={joinMatch}
       />
 
       <div class="actions">

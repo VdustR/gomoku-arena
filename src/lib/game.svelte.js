@@ -163,10 +163,18 @@ function listen(matchId) {
 }
 
 /** Open a match on the server and start mirroring it. */
-export async function startMatch({ preset = config.defaultMatch, ruleSet = game.ruleSet } = {}) {
+/**
+ * Open a new match on the server and start mirroring it.
+ *
+ * `preset` reseats both sides. Passing `seats` instead carries the current
+ * ones over, which is what "play again" means — and it opens a *new* match
+ * rather than resetting this one, so the game just finished stays reviewable
+ * at its own id.
+ */
+export async function startMatch({ preset, ruleSet = game.ruleSet, seats: keep } = {}) {
   pending?.abort()
   pending = null
-  const seats = seatsForPreset(preset)
+  const seats = keep ?? seatsForPreset(preset ?? config.defaultMatch)
   providerBySeat.black = seats.black.provider ?? DEFAULT_ENGINE_ID
   providerBySeat.white = seats.white.provider ?? DEFAULT_ENGINE_ID
 
@@ -178,11 +186,34 @@ export async function startMatch({ preset = config.defaultMatch, ruleSet = game.
   game.thinking = false
   game.candidates = []
   game.lastTelemetry = null
-  game.autoplay = preset === 'cvc'
+  game.autoplay = seats.black.kind === 'engine' && seats.white.kind === 'engine'
   game.armed = false
   applyState(view)
   listen(view.id)
+  rememberInUrl(view.id)
   return view
+}
+
+/**
+ * The address bar names the match in front of you.
+ *
+ * It is the only handle on a game, so getting it wrong is the difference
+ * between reloading to recover and reloading to lose what you were doing.
+ * Every path that changes which match this tab is showing goes through here.
+ */
+function rememberInUrl(id) {
+  if (typeof location === 'undefined') return
+  const next = `#match=${id}`
+  if (location.hash !== next) history.replaceState(null, '', next)
+}
+
+/** Play again with the same players and rules. The last game stays reviewable. */
+export async function playAgain() {
+  const seats = {
+    black: { ...game.seats.black },
+    white: { ...game.seats.white },
+  }
+  return startMatch({ seats, ruleSet: game.ruleSet })
 }
 
 /** Point this tab at a match someone else opened, e.g. one an agent created. */
@@ -191,7 +222,14 @@ export async function joinMatch(matchId) {
   game.error = null
   applyState(view)
   listen(view.id)
+  rememberInUrl(view.id)
   return view
+}
+
+/** Recent matches, newest activity first. */
+export async function listMatches() {
+  const { matches } = await request('/api/matches')
+  return matches
 }
 
 export async function setSeat(color, patch) {

@@ -19,14 +19,44 @@
 
   let {
     game,
+    awaitingStart = false,
     seatOptions,
     activePreset,
     describeSeat,
     onseatchange,
     onpreset,
     onruleset,
+    onagain,
     onclear,
+    onlist,
+    onopen,
   } = $props()
+
+  /** Earlier games, fetched when asked for rather than polled. */
+  let earlier = $state(null)
+  let copied = $state(false)
+
+  async function toggleEarlier() {
+    if (earlier) {
+      earlier = null
+      return
+    }
+    earlier = (await onlist()).filter((m) => m.id !== game.matchId)
+  }
+
+  async function copyId() {
+    try {
+      await navigator.clipboard.writeText(game.matchId)
+      copied = true
+      setTimeout(() => (copied = false), 1600)
+    } catch {
+      // A blocked clipboard is not worth an error; the id is on screen to
+      // select by hand.
+    }
+  }
+
+  const ms = (value) => (value < 60_000 ? `${Math.round(value / 1000)}s` : `${Math.round(value / 60_000)}m`)
+  const ago = (iso) => ms(Math.max(0, Date.now() - Date.parse(iso)))
 
   const SEATS = [
     [BLACK, 'Black', 'black'],
@@ -59,6 +89,7 @@
           isTurn={game.turn === color}
           thinking={game.thinking && game.thinkingFor === color}
           status={game.status}
+          waiting={awaitingStart && game.turn === color}
           since={game.turnSince}
           providerName={PROVIDERS[game.seats[key].provider]?.name ?? 'engine'}
         />
@@ -78,6 +109,40 @@
       <span class="sep">·</span><span class="offline">reconnecting</span>
     {/if}
   </p>
+
+  <!-- The id is the handle on this game: to share it, to come back to it, or
+       to hand it to an agent you have not seated yet. -->
+  <div class="identity">
+    <code class="tnum">{game.matchId ?? '—'}</code>
+    <button type="button" onclick={copyId} disabled={!game.matchId}>{copied ? 'Copied' : 'Copy id'}</button>
+  </div>
+
+  <button type="button" class="earlier-toggle" onclick={toggleEarlier}>
+    {earlier ? 'Hide earlier games' : 'Earlier games'}
+  </button>
+
+  {#if earlier}
+    {#if earlier.length === 0}
+      <p class="consequence">Nothing else on this server yet.</p>
+    {:else}
+      <ul class="earlier">
+        {#each earlier.slice(0, 8) as match}
+          <li>
+            <button type="button" onclick={() => onopen(match.id)}>
+              <span class="who">
+                {match.seats.black.label ?? match.seats.black.kind}
+                <span class="sep">vs</span>
+                {match.seats.white.label ?? match.seats.white.kind}
+              </span>
+              <span class="meta tnum">
+                {match.moves} · {match.status === 'playing' ? 'live' : match.status} · {ago(match.updatedAt)}
+              </span>
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  {/if}
 </section>
 
 <section class="panel">
@@ -110,9 +175,14 @@
 <section class="panel">
   <h3>Start over</h3>
 
+  <button class="wide primary" onclick={onagain}>
+    New game
+    <span class="aside">same players, this one stays reviewable</span>
+  </button>
+
   <button class="wide" onclick={onclear} disabled={game.history.length === 0}>
-    Clear the board
-    <span class="aside">keeps both seats</span>
+    Reset this board
+    <span class="aside">discards the moves played here</span>
   </button>
 
   <div class="divider"></div>
@@ -129,7 +199,15 @@
       <button class:active={game.ruleSet === rule.id} onclick={() => onruleset(rule.id)}>{rule.name}</button>
     {/each}
   </div>
-  <p class="consequence">{RULE_SETS[game.ruleSet].blurb}</p>
+  <p class="consequence">
+    {RULE_SETS[game.ruleSet].blurb}
+    {#if game.history.length > 0}
+      <span class="warn">
+        This applies to the game on the board from the next move. A position reached under free style can
+        leave black with no legal continuation under renju.
+      </span>
+    {/if}
+  </p>
 </section>
 
 <style>
@@ -208,6 +286,87 @@
     color: var(--rose);
   }
 
+  .identity {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .identity code {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--font-data);
+    font-size: 0.6875rem;
+    color: var(--text-lo);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .identity button,
+  .earlier-toggle {
+    background: none;
+    border: 1px solid var(--ink-600);
+    border-radius: var(--radius-sm);
+    padding: 0.3rem 0.6rem;
+    font-size: 0.75rem;
+    color: var(--text-lo);
+    cursor: pointer;
+    transition:
+      border-color 160ms var(--ease-out),
+      color 160ms var(--ease-out);
+  }
+
+  .identity button:hover:not(:disabled),
+  .earlier-toggle:hover {
+    border-color: var(--amber);
+    color: var(--text-hi);
+  }
+
+  .identity button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .earlier-toggle {
+    justify-self: start;
+  }
+
+  .earlier {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.2rem;
+  }
+
+  .earlier button {
+    display: grid;
+    gap: 0.15rem;
+    width: 100%;
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 0.4rem 0.5rem;
+    text-align: left;
+    cursor: pointer;
+    transition: background 160ms var(--ease-out);
+  }
+
+  .earlier button:hover {
+    background: var(--ink-750);
+  }
+
+  .earlier .who {
+    font-size: 0.75rem;
+    color: var(--text);
+  }
+
+  .earlier .meta {
+    font-size: 0.6875rem;
+    color: var(--text-lo);
+  }
+
   .row {
     display: flex;
     align-items: center;
@@ -244,6 +403,14 @@
     color: var(--text-lo);
   }
 
+  /* The rule control reaches further than the others in its panel, so it says
+     so rather than leaving the reader to find out by being refused. */
+  .consequence .warn {
+    display: block;
+    margin-top: 0.35rem;
+    color: #c9b48d;
+  }
+
   .wide {
     display: flex;
     align-items: baseline;
@@ -264,6 +431,16 @@
   .wide:hover:not(:disabled) {
     border-color: var(--amber);
     color: var(--text-hi);
+  }
+
+  .wide.primary {
+    background: var(--ink-700);
+    border-color: var(--ink-500);
+    color: var(--text-hi);
+    font-weight: 500;
+  }
+  .wide.primary:hover {
+    border-color: var(--amber);
   }
   .wide:disabled {
     opacity: 0.4;
