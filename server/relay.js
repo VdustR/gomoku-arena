@@ -138,16 +138,15 @@ async function forward(res, { url, key, body, timeoutMs = UPSTREAM_TIMEOUT_MS })
  */
 export async function handleRelay(req, res) {
   const path = (req.url ?? '').split('?')[0]
-  if (!path.startsWith('/api/')) return false
+
+  // Claim this handler's own routes first. Rejecting by method before knowing
+  // whether the path belongs here would answer every other /api/ route, which
+  // is how PATCH /api/match/:id once came back 405.
+  const route = Object.entries(ROUTES).find(([prefix]) => path.startsWith(prefix))?.[1]
+  if (!route) return false
 
   if (req.method !== 'POST') {
     send(res, 405, { ok: false, body: { error: 'POST only' } })
-    return true
-  }
-
-  const route = Object.entries(ROUTES).find(([prefix]) => path.startsWith(prefix))?.[1]
-  if (!route) {
-    send(res, 404, { ok: false, body: { error: `unknown relay route: ${path}` } })
     return true
   }
 
@@ -206,17 +205,4 @@ export async function handleRelay(req, res) {
 
   await forward(res, { url: endpoint, key, body: payload.request })
   return true
-}
-
-/** Vite dev-server plugin wrapping the same handler. */
-export function relayPlugin() {
-  return {
-    name: 'gomoku-relay',
-    configureServer(server) {
-      server.middlewares.use(async (req, res, next) => {
-        const handled = await handleRelay(req, res)
-        if (!handled) next()
-      })
-    },
-  }
 }

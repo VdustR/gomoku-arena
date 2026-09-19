@@ -1,0 +1,4 @@
+# pnpm 11 reads build-script approvals from here. esbuild's postinstall places
+# its platform binary; nothing else in the tree needs to run a script.
+allowBuilds:
+  esbuild: true

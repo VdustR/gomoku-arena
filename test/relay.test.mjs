@@ -81,7 +81,13 @@ async function call(route, body, key) {
     headers,
     body: JSON.stringify(body),
   })
-  return { status: response.status, json: await response.json() }
+  const text = await response.text()
+  try {
+    return { status: response.status, json: JSON.parse(text) }
+  } catch {
+    // Surface what actually came back instead of a bare parse error.
+    throw new Error(`${route} answered ${response.status} with non-JSON: ${text.slice(0, 120)}`)
+  }
 }
 
 const sinks = [await sink('caller', CALLER_PORT), await sink('pinned', PINNED_PORT)]
@@ -102,12 +108,26 @@ check(
   (await call('/api/jev', { baseUrl: 'http://evil.example.com/v1', request: {} }, 'k')).status,
   400,
 )
-check('an unknown route is a 404', (await call('/api/nope', { baseUrl: CALLER_BASE, request: {} }, 'k')).status, 404)
+check('an unknown route under /api is a JSON 404', (await call('/api/nope', { baseUrl: CALLER_BASE, request: {} }, 'k')).status, 404)
 check(
   'a missing key is a 401',
   (await call('/api/openai', { baseUrl: CALLER_BASE, request: {} })).status,
   401,
 )
+
+/*
+ * The relay shares /api/ with the match routes. It once rejected by method
+ * before checking whether the path was even its own, which answered every
+ * PATCH on the match API with "POST only" and froze the seat picker.
+ */
+const patched = await fetch(`http://127.0.0.1:${RELAY_PORT}/api/match/not-a-real-id`, {
+  method: 'PATCH',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ black: { kind: 'engine' } }),
+})
+const patchedBody = await patched.json()
+check('a PATCH on the match API is not claimed by the relay', patched.status, 404)
+check('and reaches the match handler', patchedBody.error, 'no_such_match')
 
 await stop(relay)
 

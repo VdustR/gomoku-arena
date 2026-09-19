@@ -1,8 +1,8 @@
 import { svelte } from '@sveltejs/vite-plugin-svelte'
-import { relayPlugin } from './server/relay.js'
+import { serverRoutesPlugin } from './server/routes.js'
 
 export default {
-  plugins: [svelte(), relayPlugin()],
+  plugins: [svelte(), serverRoutesPlugin()],
   server: {
     port: 5273,
     // *.localhost resolves to loopback in Chromium; allow the vanity host.

@@ -1,16 +1,16 @@
 /**
  * The server you start yourself.
  *
- * Serves the built page from `dist/` and answers `/api/*` through the relay,
- * so the production setup matches `npm run dev` exactly. Run `npm run build`
- * first, then `npm start`.
+ * Holds the matches, answers `/api/*`, serves MCP at `/mcp`, and serves the
+ * built page from `dist/`. The same route pipeline backs `npm run dev`, so
+ * the two behave identically. Run `npm run build` first, then `npm start`.
  */
 
 import { createServer } from 'node:http'
 import { readFile, stat } from 'node:fs/promises'
 import { extname, join, normalize, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { handleRelay } from './relay.js'
+import { handleServerRoutes } from './routes.js'
 
 const ROOT = resolve(fileURLToPath(new URL('../dist', import.meta.url)))
 const PORT = Number(process.env.PORT ?? 5273) || 5273
@@ -65,7 +65,7 @@ async function serveStatic(req, res) {
 
 const server = createServer(async (req, res) => {
   try {
-    if (await handleRelay(req, res)) return
+    if (await handleServerRoutes(req, res)) return
     await serveStatic(req, res)
   } catch (error) {
     res.statusCode = 500
@@ -75,5 +75,7 @@ const server = createServer(async (req, res) => {
 })
 
 server.listen(PORT, HOST, () => {
-  console.log(`Gomoku Arena on http://gomoku.localhost:${PORT} (serving ${ROOT})`)
+  console.log(`Gomoku Arena on http://gomoku.localhost:${PORT}`)
+  console.log(`  page   ${ROOT}`)
+  console.log(`  MCP    http://127.0.0.1:${PORT}/mcp`)
 })

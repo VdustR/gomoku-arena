@@ -9,8 +9,9 @@ web
 ## Stack
 
 Vite+ (`vite-plus` 0.3.3, CLI `vp`) with Svelte 5 runes, chosen by the user.
-`server/relay.js` is shared by the Vite dev server and a plain Node server
-(`npm start`), so development and the built page behave identically.
+pnpm, with node and pnpm pinned in `mise.toml`. One route pipeline
+(`server/routes.js`) is shared by the Vite dev server and a plain Node server
+(`pnpm start`), so development and the built page behave identically.
 
 ## Users
 
@@ -35,16 +36,25 @@ endpoint can be swapped for a local one without touching the game.
 ## Operating Context
 
 A page served from a server the person starts themselves, either the dev
-server or `npm start`. They supply their own key per provider; remote calls
-pass through the relay because the endpoints refuse browser origins.
+server or `pnpm start`. That server also holds the matches and exposes them
+over MCP, so a person in the browser and agents in separate terminals act on
+one board. They supply their own key per provider; remote model calls pass
+through the relay because those endpoints refuse browser origins.
 
 ## Capabilities and Constraints
 
 - Three match types: human vs human, human vs engine, engine vs engine.
 - Two rule sets: free style, and renju with black's overline, double-four, and
   double-three restrictions.
-- Four providers: Chrome's built-in Prompt API, any Jev-compatible endpoint,
-  any OpenAI-compatible endpoint, and an in-page heuristic that needs no key.
+- Seats may be held by a person, an agent over MCP, one of three search
+  engines (greedy, minimax with alpha-beta, MCTS), or a model: Chrome's
+  built-in Prompt API, any Jev-compatible endpoint, any OpenAI-compatible one.
+- Match state is server-authoritative. `server/match.js` is the only place a
+  stone is added, and it validates against the same rules the page uses.
+- One MCP server over Streamable HTTP, with the seat as an argument. stdio
+  would give each harness its own process and so its own board.
+- MCP cannot push to a client, so `await_turn` holds a call open rather than
+  having agents poll.
 - Both remote providers take a base URL, so either can point at a hosted
   service or a local one. Jev presets cover TypeSafe, localjev, and openjev.
 - Chrome's built-in model takes the default seat whenever it is available,
@@ -67,7 +77,7 @@ pass through the relay because the endpoints refuse browser origins.
 
 - `test/rules.test.mjs` — 14 assertions covering both rule sets, run with
   `node test/rules.test.mjs`.
-- Relay verified end to end against `jev-1.13.0` through `npm start`:
+- Relay verified end to end against `jev-1.13.0` through `pnpm start`:
   HTTP 200, 710 ms, real probabilities returned.
 - `/api/jev` verified against both a hosted base URL (TypeSafe, 736 ms) and a
   loopback one (a stand-in server on `http://127.0.0.1:8080/v1`, 9 ms), with
@@ -78,7 +88,10 @@ pass through the relay because the endpoints refuse browser origins.
 - Path traversal against the static server refused: `/../package.json`,
   `/%2e%2e/package.json`, and `/../../etc/passwd` all fall back to the entry
   document with no file contents leaked.
-- 34 assertions across three suites, all passing, none needing network.
+- 99 assertions across six suites, all passing, none needing network.
+- Two MCP clients verified acting on one board, including turn waiting,
+  refusal of an illegal move without consuming the turn, and that no opponent
+  telemetry appears in either side's view.
 - An engine-vs-engine match played to completion in the browser: 74 moves,
   White wins, no errors.
 - Chrome's built-in model reports `downloadable` in the browser used for
@@ -91,6 +104,9 @@ pass through the relay because the endpoints refuse browser origins.
 2. Show the decision, not just its result — engine, candidates, confidence, latency.
 3. No bundled credentials, and no key leaves your machine except to the
    endpoint it pays for.
+4. A player may name any point; the server decides what is legal. Narrowing
+   what a player is offered is assistance for weak models, never the safety
+   mechanism.
 4. Every provider renders through the same panel, so none of them looks
    special by construction.
 

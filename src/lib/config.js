@@ -25,7 +25,11 @@ const flag = (value, fallback) => {
 }
 
 const count = (value, fallback, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) => {
-  const parsed = Number(String(value ?? '').trim())
+  const raw = String(value ?? '').trim()
+  // An unset variable must fall back, not parse: Number('') is 0, which would
+  // silently clamp every default to the bottom of its range.
+  if (raw === '') return fallback
+  const parsed = Number(raw)
   if (!Number.isFinite(parsed)) return fallback
   return Math.min(max, Math.max(min, Math.trunc(parsed)))
 }
@@ -62,6 +66,17 @@ export const config = {
 
   /** A beat before an engine moves, so a fast reply is still readable. */
   moveDelayMs: count(env.VITE_AI_MOVE_DELAY_MS, 260, { min: 0, max: 5000 }),
+
+  /**
+   * Knobs for the code-only engines. Deeper or longer means stronger and
+   * slower; these are the values a browser can afford without stalling.
+   */
+  engines: {
+    minimaxDepth: count(env.VITE_MINIMAX_DEPTH, 4, { min: 2, max: 6 }),
+    minimaxWidth: count(env.VITE_MINIMAX_WIDTH, 10, { min: 4, max: 20 }),
+    minimaxBudgetMs: count(env.VITE_MINIMAX_BUDGET_MS, 2500, { min: 200, max: 20_000 }),
+    mctsBudgetMs: count(env.VITE_MCTS_BUDGET_MS, 1200, { min: 200, max: 20_000 }),
+  },
 
   /** Storage key for the browser-held settings. */
   storageKey: text(env.VITE_STORAGE_KEY, 'gomoku.settings'),

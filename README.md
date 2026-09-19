@@ -11,9 +11,12 @@ model is a single adapter, not a rewrite.
 
 ## Quick start
 
+The toolchain is pinned with [mise](https://mise.jdx.dev):
+
 ```sh
-npm install
-npm run dev
+mise install
+pnpm install
+pnpm dev
 ```
 
 Open <http://gomoku.localhost:5273>. Any `*.localhost` host resolves to
@@ -22,21 +25,41 @@ loopback in Chromium-based browsers; plain `localhost` works too.
 To serve the built page instead:
 
 ```sh
-npm run build
-npm start
+pnpm build
+pnpm start
 ```
 
 Both paths need a server of your own — see [Why a server is
 required](#why-a-server-is-required).
 
-## Providers
+## Who can take a seat
+
+The seat picker is grouped by what the choice costs you, not by whether
+something counts as "AI" — a free on-device model and a metered remote
+endpoint have far less in common than minimax and MCTS do.
+
+**People and agents**
+
+| Option | What it is |
+| --- | --- |
+| You | Click the board |
+| Agent over MCP | A harness plays this seat. See [Agents over MCP](#agents-over-mcp). |
+
+**Search algorithms** — only code. No key, no network, no cost.
+
+| Engine | How it decides |
+| --- | --- |
+| Greedy scoring | One ply of threat scoring. Instant, and blind to anything deeper. |
+| Minimax (alpha-beta) | Depth-limited search with pruning and move ordering by the same scoring. Depth and width are configurable. |
+| MCTS (UCT) | Guided random playouts under a time budget. Forced wins and mandatory blocks are decided before sampling, because a few hundred playouts do not settle a tactic reliably. |
+
+**Models** — decided by a model, each with its own prerequisite.
 
 | Provider | Needs a key | Where it runs |
 | --- | --- | --- |
 | Chrome built-in AI | No | On-device, via the [Prompt API](https://developer.chrome.com/docs/ai/prompt-api). No network at all. |
 | Jev-compatible | Yes | Any endpoint serving `POST <base>/systemone` |
 | OpenAI-compatible | Yes | Any endpoint serving `POST <base>/chat/completions` |
-| Built-in heuristic | No | Pattern scoring inside the page |
 
 When Chrome's built-in model is available it takes the default AI seat, ahead
 of every remote provider: it costs nothing and never leaves the machine. Set
@@ -94,20 +117,25 @@ downloads**. Never put a credential in one.
 | `VITE_PREFER_BROWSER_MODEL` | `true` | Give the on-device model the default AI seat |
 | `VITE_CANDIDATE_LIMIT` | `8` | How many moves an engine chooses between (2–24) |
 | `VITE_AI_MOVE_DELAY_MS` | `260` | A beat before an engine moves (0–5000) |
+| `VITE_MINIMAX_DEPTH` | `4` | Minimax search depth (2–6) |
+| `VITE_MINIMAX_WIDTH` | `10` | Moves considered per ply (4–20) |
+| `VITE_MINIMAX_BUDGET_MS` | `2500` | Minimax time budget |
+| `VITE_MCTS_BUDGET_MS` | `1200` | MCTS playout budget |
 | `VITE_STORAGE_KEY` | `gomoku.settings` | Where browser-held settings live |
 
 The rest stay on the server and never reach the page:
 
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `PORT` | `5273` | Port for `npm start` |
-| `HOST` | `127.0.0.1` | Interface for `npm start` |
+| `PORT` | `5273` | Port for `pnpm start` |
+| `HOST` | `127.0.0.1` | Interface for `pnpm start` |
 | `GOMOKU_JEV_KEY` | unset | Relay fallback when the page sends no key |
 | `GOMOKU_JEV_BASE_URL` | unset | Required with `GOMOKU_JEV_KEY`; pins where that key is spent |
 | `GOMOKU_OPENAI_KEY` | unset | Relay fallback when the page sends no key |
 | `GOMOKU_OPENAI_BASE_URL` | unset | Required with `GOMOKU_OPENAI_KEY` |
 | `GOMOKU_UPSTREAM_TIMEOUT_MS` | `60000` | How long the relay waits upstream |
 | `GOMOKU_ALLOW_INSECURE_HTTP` | `false` | Permit plain http to a non-loopback endpoint |
+| `GOMOKU_MAX_MATCHES` | `50` | Matches kept before the oldest is evicted |
 
 ## Why a server is required
 
@@ -118,7 +146,7 @@ origin tested — `http://localhost`, `http://127.0.0.1`, `https://localhost`,
 `access-control-allow-origin` header on any of them.
 
 `server/relay.js` forwards one request and keeps no copy of the key. It backs
-both `npm run dev` (as Vite middleware) and `npm start` (as a plain Node
+both `pnpm dev` (as Vite middleware) and `pnpm start` (as a plain Node
 server), so the two behave identically. It accepts `https`, or `http` on
 localhost; plain http anywhere else takes `GOMOKU_ALLOW_INSECURE_HTTP=true`,
 because it would put the key on the wire in the clear.
@@ -140,16 +168,19 @@ rejected after the fact.
 ## Tests
 
 ```sh
-npm test
+pnpm test
 ```
 
-Three suites, no network needed:
+Six suites, no network needed:
 
 | Suite | Covers |
 | --- | --- |
 | `test/rules.test.mjs` | Five, overline, double four, double three, board edges, both rule sets |
+| `test/config.test.mjs` | Env readers, including that an unset variable falls back rather than parsing as zero |
+| `test/engines.test.mjs` | Each search engine takes a win, blocks a loss, and never offers a forbidden move |
 | `test/providers.test.mjs` | Reading a move index out of whatever a model replied with |
-| `test/relay.test.mjs` | Key handling and endpoint pinning, against a live server |
+| `test/relay.test.mjs` | Key handling, endpoint pinning, and route ownership, against a live server |
+| `test/mcp.test.mjs` | Two MCP clients on one board, turn waiting, and what stays hidden from an opponent |
 
 ## How a move is chosen
 
@@ -197,17 +228,23 @@ board, the rules, or the UI is specific to any one vendor.
 ## Project layout
 
 ```
+mise.toml               Pinned node and pnpm
 index.html              Document head: metadata, fonts, JSON-LD
 src/lib/rules.js        Board, win detection, renju forbidden moves
 src/lib/config.js       Build-time configuration from VITE_*
 src/lib/settings.svelte.js  Browser-held settings (localStorage)
-src/lib/game.svelte.js  Game state, seats, move log
-src/lib/ai/heuristic.js Candidate generation and the offline engine
-src/lib/ai/providers.js Provider registry and adapters
+src/lib/game.svelte.js  The page's client of a server-held match
+src/lib/ai/engines.js   Greedy, minimax, and MCTS
+src/lib/ai/heuristic.js Candidate generation and shape scoring
+src/lib/ai/providers.js Provider registry and model adapters
 src/components/         Board, telemetry panel, settings dialog
-server/relay.js         Shared relay: Vite middleware and Node handler
-server/index.js         `npm start`: serves dist/ and the relay
-test/                   Rules, reply parsing, and relay behaviour
+server/match.js         Authoritative match state; the only place a stone lands
+server/mcp.js           MCP tools over Streamable HTTP
+server/api.js           Match REST and the browser's event stream
+server/relay.js         Forwards model requests that refuse browser origins
+server/routes.js        One pipeline, shared by the dev server and `pnpm start`
+server/index.js         `pnpm start`: serves dist/ and the routes
+test/                   Six suites; see Tests above
 ```
 
 ## License

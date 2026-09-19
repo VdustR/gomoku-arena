@@ -3,6 +3,9 @@ dist/
 .vite/
 .DS_Store
 
+# pnpm keeps its own state here.
+.pnpm-store/
+
 # Local configuration. `.env.example` is the documented template.
 .env
 .env.*

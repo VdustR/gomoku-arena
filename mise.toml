@@ -1,0 +1,9 @@
+# Toolchain for this repository. `mise install` sets it up.
+[tools]
+node = "26.8.2"
+pnpm = "11.25.0"
+
+[env]
+# pnpm's store stays inside the repo-managed toolchain rather than the user's
+# global one, so a clean checkout behaves the same everywhere.
+_.path = ["./node_modules/.bin"]

@@ -11,7 +11,7 @@
 import { BLACK, WHITE, EMPTY, SIZE, idx, inBounds, moveLegality, coordLabel } from '../rules.js'
 import { config } from '../config.js'
 
-const DIRECTIONS = [
+export const DIRECTIONS = [
   [1, 0],
   [0, 1],
   [1, 1],
@@ -19,7 +19,7 @@ const DIRECTIONS = [
 ]
 
 /** How a run of stones reads once both of its ends are accounted for. */
-const SHAPE_SCORES = {
+export const SHAPE_SCORES = {
   five: 1_000_000,
   'open-four': 100_000,
   four: 12_000,
@@ -44,7 +44,7 @@ const SHAPE_COPY = {
 }
 
 /** Classify the run through (x, y) along one axis after `color` plays there. */
-function shapeOnAxis(board, x, y, dx, dy, color, size) {
+export function shapeOnAxis(board, x, y, dx, dy, color, size) {
   let run = 1
   let openEnds = 0
   for (const sign of [-1, 1]) {
@@ -71,7 +71,7 @@ function shapeOnAxis(board, x, y, dx, dy, color, size) {
 }
 
 /** The strongest shape (x, y) creates for `color`, across all four axes. */
-function bestShape(board, x, y, color, size) {
+export function bestShape(board, x, y, color, size) {
   let best = 'none'
   for (const [dx, dy] of DIRECTIONS) {
     const shape = shapeOnAxis(board, x, y, dx, dy, color, size)
@@ -81,7 +81,7 @@ function bestShape(board, x, y, color, size) {
 }
 
 /** Empty points within `reach` of an existing stone — everywhere else is noise. */
-function relevantPoints(board, size, reach = 2) {
+export function relevantPoints(board, size, reach = 2) {
   const seen = new Set()
   const points = []
   let occupied = false

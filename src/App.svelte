@@ -7,15 +7,27 @@
     playHuman,
     playProvider,
     resetGame,
+    startMatch,
+    joinMatch,
+    setSeat,
+    setRuleSet,
     undoLastPair,
     stopThinking,
     forbiddenCopyFor,
-    seatsForPreset,
+    AGENT,
     BLACK,
     WHITE,
   } from './lib/game.svelte.js'
   import { RULE_SETS } from './lib/rules.js'
-  import { PROVIDERS, BROWSER_ID, JEV_ID, OPENAI_ID, LOCAL_ID, detectBrowserModel } from './lib/ai/providers.js'
+  import {
+    PROVIDERS,
+    PROVIDER_GROUPS,
+    BROWSER_ID,
+    JEV_ID,
+    OPENAI_ID,
+    DEFAULT_ENGINE_ID,
+    detectBrowserModel,
+  } from './lib/ai/providers.js'
   import { settings } from './lib/settings.svelte.js'
   import { config } from './lib/config.js'
 
@@ -23,42 +35,73 @@
   let browserModel = $state(null)
   let rejection = $state(null)
 
-  // The on-device model outranks everything else when it is there: no key,
-  // no network, no cost. Only when it is missing does a remote engine seat.
+  // Open a match on the server, or rejoin one named in the URL so a tab can
+  // watch a game an agent started: #match=<id>
   $effect(() => {
-    detectBrowserModel().then((result) => {
-      browserModel = result
-      const preferred = result.supported && config.preferBrowserModel ? BROWSER_ID : settings.jevKey ? JEV_ID : LOCAL_ID
-      for (const color of [BLACK, WHITE]) {
-        if (game.seats[color].kind === 'ai') game.seats[color] = { kind: 'ai', provider: preferred }
-      }
-    })
+    const fromUrl = new URLSearchParams(location.hash.slice(1)).get('match')
+    const opening = fromUrl ? joinMatch(fromUrl).catch(() => startMatch()) : startMatch()
+    opening
+      .then((view) => {
+        location.hash = `match=${view.id}`
+        return detectBrowserModel()
+      })
+      .then((result) => {
+        browserModel = result
+        const preferred =
+          result.supported && config.preferBrowserModel ? BROWSER_ID : settings.jevKey ? JEV_ID : DEFAULT_ENGINE_ID
+        for (const color of [BLACK, WHITE]) {
+          const seat = game.seats[color === BLACK ? 'black' : 'white']
+          if (seat.kind === 'engine') setSeat(color, { kind: 'engine', provider: preferred })
+        }
+      })
+      .catch((error) => {
+        game.error = { title: 'Could not reach the server', detail: String(error?.message ?? error) }
+      })
   })
 
   const availableProviders = $derived(
     Object.values(PROVIDERS).filter((p) => p.id !== BROWSER_ID || browserModel?.supported),
   )
 
-  const bothSeatsAi = $derived(game.seats[BLACK].kind === 'ai' && game.seats[WHITE].kind === 'ai')
+  /** The seat picker, grouped by what the choice actually costs the player. */
+  const seatOptions = $derived([
+    {
+      ...PROVIDER_GROUPS.seat,
+      options: [
+        { id: 'human', name: 'You', note: 'click the board' },
+        { id: AGENT, name: 'Agent over MCP', note: 'plays from a harness' },
+      ],
+    },
+    ...['search', 'model'].map((group) => ({
+      ...PROVIDER_GROUPS[group],
+      options: availableProviders.filter((p) => p.group === group),
+    })),
+  ].filter((group) => group.options.length > 0))
 
-  // Hand the turn to whichever engine is seated, once the board settles. Two
+  const seatFor = (color) => game.seats[color === BLACK ? 'black' : 'white']
+  const bothSeatsAi = $derived(seatFor(BLACK).kind === 'engine' && seatFor(WHITE).kind === 'engine')
+
+  // Drive whichever in-page engine is seated, once the board settles. A seat
+  // held by an agent is left alone: it moves over MCP, not from here. Two
   // engines only keep going while autoplay is on, so a match can be paused.
   $effect(() => {
-    if (game.status !== 'playing' || game.thinking) return
-    if (game.seats[game.turn].kind !== 'ai') return
+    if (!game.matchId || game.status !== 'playing' || game.thinking) return
+    if (seatFor(game.turn).kind !== 'engine') return
     if (bothSeatsAi && !game.autoplay) return
     const timer = setTimeout(() => playProvider(), config.moveDelayMs)
     return () => clearTimeout(timer)
   })
 
-  const matchup = $derived(
-    `${game.seats[BLACK].kind === 'human' ? 'You' : PROVIDERS[game.seats[BLACK].provider].name} vs ${
-      game.seats[WHITE].kind === 'human' ? 'You' : PROVIDERS[game.seats[WHITE].provider].name
-    }`,
-  )
+  const describeSeat = (color) => {
+    const seat = seatFor(color)
+    if (seat.kind === 'human') return 'You'
+    if (seat.kind === AGENT) return seat.label ?? 'Agent over MCP'
+    return PROVIDERS[seat.provider]?.name ?? seat.provider
+  }
+  const matchup = $derived(`${describeSeat(BLACK)} vs ${describeSeat(WHITE)}`)
 
-  function onplay(x, y) {
-    const reason = playHuman(x, y)
+  async function onplay(x, y) {
+    const reason = await playHuman(x, y)
     if (!reason || reason === 'not-your-turn' || reason === 'occupied') {
       rejection = null
       return
@@ -69,19 +112,28 @@
 
   function preferredEngine() {
     if (browserModel?.supported && config.preferBrowserModel) return BROWSER_ID
-    return settings.jevKey ? JEV_ID : LOCAL_ID
+    return settings.jevKey ? JEV_ID : DEFAULT_ENGINE_ID
   }
 
-  function setPreset(preset) {
-    resetGame()
-    game.seats = seatsForPreset(preset, preferredEngine())
-    game.autoplay = preset === 'cvc'
+  function onSeatChange(color, value) {
+    if (value === 'human' || value === AGENT) {
+      return setSeat(color, { kind: value, label: value === AGENT ? 'Agent over MCP' : null })
+    }
+    return setSeat(color, { kind: 'engine', provider: value })
+  }
+
+  async function setPreset(preset) {
+    const view = await startMatch({ preset })
+    location.hash = `match=${view.id}`
+    for (const color of [BLACK, WHITE]) {
+      if (seatFor(color).kind === 'engine') await setSeat(color, { kind: 'engine', provider: preferredEngine() })
+    }
   }
 
   const activePreset = $derived(
-    game.seats[BLACK].kind === 'human' && game.seats[WHITE].kind === 'human'
+    seatFor(BLACK).kind === 'human' && seatFor(WHITE).kind === 'human'
       ? 'pvp'
-      : game.seats[BLACK].kind === 'ai' && game.seats[WHITE].kind === 'ai'
+      : bothSeatsAi
         ? 'cvc'
         : 'pvc',
   )
@@ -148,7 +200,7 @@
         winningStones={game.winningStones}
         candidates={game.candidates}
         thinking={game.thinking}
-        interactive={game.status === 'playing' && !game.thinking && game.seats[game.turn].kind === 'human'}
+        interactive={game.status === 'playing' && !game.thinking && seatFor(game.turn).kind === 'human'}
         {onplay}
       />
 
@@ -184,18 +236,20 @@
                 <span class="disc" class:white={color === WHITE}></span>
                 {name}
               </span>
-              {#if game.seats[color].kind === 'ai'}
-                <select
-                  value={game.seats[color].provider}
-                  onchange={(e) => (game.seats[color] = { kind: 'ai', provider: e.currentTarget.value })}
-                >
-                  {#each availableProviders as provider}
-                    <option value={provider.id}>{provider.name}</option>
-                  {/each}
-                </select>
-              {:else}
-                <span class="human">Human</span>
-              {/if}
+              <select
+                value={seatFor(color).kind === 'engine' ? seatFor(color).provider : seatFor(color).kind}
+                onchange={(e) => onSeatChange(color, e.currentTarget.value)}
+              >
+                {#each seatOptions as group}
+                  <optgroup label={group.label}>
+                    {#each group.options as option}
+                      <option value={option.id}>
+                        {option.name}{option.note ? ` — ${option.note}` : ''}
+                      </option>
+                    {/each}
+                  </optgroup>
+                {/each}
+              </select>
             </div>
           {/each}
         </div>
@@ -205,7 +259,7 @@
         <h3>Rules</h3>
         <div class="segmented" role="group" aria-label="Rule set">
           {#each Object.values(RULE_SETS) as rule}
-            <button class:active={game.ruleSet === rule.id} onclick={() => (game.ruleSet = rule.id)}>
+            <button class:active={game.ruleSet === rule.id} onclick={() => setRuleSet(rule.id)}>
               {rule.name}
             </button>
           {/each}
@@ -226,6 +280,17 @@
         <button class="primary" onclick={() => resetGame()}>New game</button>
       </div>
 
+      {#if game.seats.black.kind === AGENT || game.seats.white.kind === AGENT}
+        <section class="panel mcp">
+          <h3>Agent seat</h3>
+          <p>Point a harness at the MCP endpoint and give it this match id.</p>
+          <code class="tnum">{game.matchId ?? '—'}</code>
+          <p class="endpoint">
+            <span class="tnum">{typeof location !== 'undefined' ? `${location.origin}/mcp` : '/mcp'}</span>
+          </p>
+        </section>
+      {/if}
+
       <Telemetry
         telemetry={game.lastTelemetry}
         history={game.history}
@@ -236,13 +301,15 @@
   </main>
 
   <section id="how" class="how">
-    <h2>Three ways to seat an engine</h2>
+    <h2>What can take a seat</h2>
     <div class="providers">
-      {#each [PROVIDERS[BROWSER_ID], PROVIDERS[JEV_ID], PROVIDERS[OPENAI_ID]] as provider}
+      {#each [PROVIDERS.greedy, PROVIDERS.minimax, PROVIDERS.mcts, PROVIDERS[BROWSER_ID], PROVIDERS[JEV_ID], PROVIDERS[OPENAI_ID]] as provider}
         <article class:unavailable={provider.id === BROWSER_ID && browserModel && !browserModel.supported}>
           <h3>{provider.name}</h3>
           <p>{provider.tagline}</p>
-          {#if provider.id === BROWSER_ID}
+          {#if provider.isEngine}
+            <p class="status">Code only. No key, no network, no cost.</p>
+          {:else if provider.id === BROWSER_ID}
             <p class="status">{browserModel?.detail ?? 'Checking this browser…'}</p>
           {:else if provider.id === JEV_ID}
             <p class="status">
@@ -505,21 +572,39 @@
     color: var(--text);
   }
 
-  .human {
-    color: var(--text-lo);
-  }
-
   select {
     background: var(--ink-850);
     border: 1px solid var(--ink-600);
     border-radius: var(--radius-sm);
     padding: 0.35rem 0.5rem;
     font-size: 0.8125rem;
-    max-width: 12rem;
+    max-width: 13.5rem;
     cursor: pointer;
   }
   select:hover {
     border-color: var(--ink-500);
+  }
+
+  .mcp p {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--text-lo);
+    line-height: 1.6;
+  }
+
+  .mcp code {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--teal-hi);
+    background: var(--ink-850);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 0.65rem;
+    overflow-wrap: anywhere;
+  }
+
+  .mcp .endpoint span {
+    font-size: 0.75rem;
+    color: var(--text);
   }
 
   .rule-blurb {

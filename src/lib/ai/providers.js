@@ -11,18 +11,35 @@
  * relay forwards one request and keeps no copy of the key.
  */
 
-import { candidateMoves, heuristicPick, describePosition } from './heuristic.js'
+import { candidateMoves, describePosition } from './heuristic.js'
+import { ENGINES } from './engines.js'
 import { BLACK } from '../rules.js'
 
 /** Chrome's built-in model is on-device: no key, no network, no cost. */
 export const BROWSER_ID = 'browser'
 export const JEV_ID = 'jev'
 export const OPENAI_ID = 'openai'
-export const LOCAL_ID = 'local'
+/** Engines that are only code. Their ids are the keys of ENGINES. */
+export const ENGINE_IDS = Object.keys(ENGINES)
+export const DEFAULT_ENGINE_ID = 'greedy'
+
+/**
+ * How the seat picker groups its options. The split is by what a person is
+ * actually choosing between — who drives the seat, and what it costs to use —
+ * rather than by whether something counts as "AI", which would file a free
+ * on-device model beside a metered remote one.
+ */
+export const PROVIDER_GROUPS = {
+  seat: { id: 'seat', label: 'People and agents' },
+  search: { id: 'search', label: 'Search algorithms' },
+  model: { id: 'model', label: 'Models' },
+}
 
 export const PROVIDERS = {
   [BROWSER_ID]: {
     id: BROWSER_ID,
+    group: 'model',
+    note: 'on-device, no key',
     name: 'Chrome built-in AI',
     tagline: 'On-device Gemini Nano. No key, no network, no cost.',
     needsKey: false,
@@ -30,6 +47,8 @@ export const PROVIDERS = {
   },
   [JEV_ID]: {
     id: JEV_ID,
+    group: 'model',
+    note: 'needs a key',
     name: 'Jev-compatible',
     tagline: 'A typed decision with a probability for every candidate. TypeSafe, or your own server.',
     needsKey: true,
@@ -38,19 +57,29 @@ export const PROVIDERS = {
   },
   [OPENAI_ID]: {
     id: OPENAI_ID,
+    group: 'model',
+    note: 'needs a key',
     name: 'OpenAI-compatible',
     tagline: 'Any endpoint that speaks /chat/completions, including a local one.',
     needsKey: true,
     keyHint: 'your provider’s dashboard',
     docs: 'https://platform.openai.com/docs/api-reference/chat',
   },
-  [LOCAL_ID]: {
-    id: LOCAL_ID,
-    name: 'Built-in heuristic',
-    tagline: 'Pattern scoring in the page itself. Always available, never calls out.',
-    needsKey: false,
-    docs: null,
-  },
+  ...Object.fromEntries(
+    Object.values(ENGINES).map((engine) => [
+      engine.id,
+      {
+        id: engine.id,
+        group: 'search',
+        note: engine.note,
+        name: engine.name,
+        tagline: engine.tagline,
+        needsKey: false,
+        isEngine: true,
+        docs: null,
+      },
+    ]),
+  ),
 }
 
 /**
@@ -304,19 +333,18 @@ async function openaiMove({ position, candidates, key, config, signal }) {
   }
 }
 
-function localMove({ candidates }) {
-  const started = performance.now()
-  const move = heuristicPick(candidates)
-  const top = Math.max(...candidates.map((c) => c.score), 1)
+/**
+ * A code-only engine. These search the board themselves rather than picking
+ * from a shortlist, so they are handed the position and nothing else.
+ */
+function engineMove({ board, color, ruleSet, provider, options }) {
+  const engine = ENGINES[provider]
+  const result = engine.run(board, color, ruleSet, options)
+  if (!result) return { move: null, latencyMs: 0, telemetry: null }
   return {
-    move,
-    latencyMs: Math.max(1, Math.round(performance.now() - started)),
-    telemetry: {
-      provider: LOCAL_ID,
-      model: 'pattern scoring',
-      ranked: candidates.map((c) => ({ label: c.label, weight: c.score / top })),
-      notes: 'Scored in the page. No request left the browser.',
-    },
+    move: { x: result.x, y: result.y, label: result.point },
+    latencyMs: result.latencyMs,
+    telemetry: { provider, ...result.telemetry },
   }
 }
 
@@ -324,7 +352,13 @@ function localMove({ candidates }) {
  * Pick a move for `color`. Resolves with the chosen candidate, how long the
  * provider took, and whatever the provider exposed about its reasoning.
  */
-export async function chooseMove({ board, color, ruleSet, provider, key, config = {}, signal }) {
+export async function chooseMove({ board, color, ruleSet, provider, key, config = {}, options, signal }) {
+  // A code-only engine reasons over the whole board; a shortlist would only
+  // cap how well it can play.
+  if (ENGINES[provider]) {
+    return { ...engineMove({ board, color, ruleSet, provider, options }), candidates: [] }
+  }
+
   const candidates = candidateMoves(board, color, ruleSet)
   if (candidates.length === 0) return { move: null, candidates, latencyMs: 0, telemetry: null }
 
@@ -347,14 +381,7 @@ export async function chooseMove({ board, color, ruleSet, provider, key, config 
     }
   }
 
-  const run =
-    provider === BROWSER_ID
-      ? browserMove
-      : provider === JEV_ID
-        ? jevMove
-        : provider === OPENAI_ID
-          ? openaiMove
-          : localMove
+  const run = provider === BROWSER_ID ? browserMove : provider === JEV_ID ? jevMove : openaiMove
 
   const result = await run(args)
   return { ...result, candidates }
