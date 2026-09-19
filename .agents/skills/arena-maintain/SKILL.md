@@ -115,7 +115,10 @@ guarantee is one:
 
 ## The suite
 
-`pnpm test` runs ten suites and needs no network. Server-backed suites take a
+`pnpm test` runs ten suites and needs no network. CI runs it, `pnpm check` and
+`pnpm build` on every push and pull request, from the toolchain `mise.toml`
+pins — so a green local run and a green CI run mean the same thing.
+`experiments/` stays out of both: those take minutes and some spend money. Server-backed suites take a
 free port and their own state directory; a fixed port once meant a leftover
 process answered instead and the suite quietly checked yesterday's code.
 

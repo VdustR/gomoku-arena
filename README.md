@@ -213,6 +213,10 @@ pnpm test
 pnpm check
 ```
 
+Both run in CI on every push and every pull request, along with `pnpm build`.
+The workflow reads `mise.toml` for the toolchain, so it uses the same node and
+pnpm a person does, and needs no secret or service of its own.
+
 `pnpm check` runs format, lint and type checks: `vp fmt`, Vite+'s type-aware
 path through tsgolint for `.ts`, and `svelte-check` for the components, which
 Vite+ does not read. The type checks go against the strict settings in
