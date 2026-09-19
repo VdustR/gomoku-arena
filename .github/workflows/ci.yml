@@ -1,0 +1,50 @@
+# Run what a person would run, on every push and every pull request.
+#
+# Nothing here needs a secret, a service or the network beyond the registry:
+# the ten suites take their own free port and their own state directory, and
+# `experiments/` stays out because those take minutes and some spend money.
+#
+# Actions are pinned by commit rather than by tag. A tag can be moved; the
+# version beside each one is what that commit was published as.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push supersedes the first. The default branch is exempt, so a
+# merge is never cancelled by whatever lands after it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # node and pnpm are pinned in mise.toml, so CI reads the same file a
+      # person does rather than keeping a second copy of the versions here.
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Format, lint and types. Runs before the suite because it is seconds,
+      # and a type error is usually the more legible failure of the two.
+      - name: Check
+        run: pnpm check
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
