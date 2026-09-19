@@ -22,17 +22,14 @@ if (!response.ok) {
 }
 const review = await response.json()
 
-const ms = (value) =>
-  value == null ? '—' : value < 1000 ? `${value}ms` : `${(value / 1000).toFixed(1)}s`
+const ms = (value) => (value == null ? '—' : value < 1000 ? `${value}ms` : `${(value / 1000).toFixed(1)}s`)
 
 const label = (side) => side.player.label ?? side.player.kind
 
 console.log(`\n${label(review.sides.black)}  vs  ${label(review.sides.white)}`)
 console.log(`${review.ruleSet} · ${review.moves.length} moves · ${ms(review.durationMs)}`)
 console.log(
-  review.status === 'win'
-    ? `${review.winner} wins with ${review.winningStones.join(' ')}`
-    : review.status,
+  review.status === 'win' ? `${review.winner} wins with ${review.winningStones.join(' ')}` : review.status,
 )
 
 console.log('\n  #  side   point  thinking  reason')

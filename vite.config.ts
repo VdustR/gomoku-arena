@@ -12,6 +12,14 @@ export default {
    * `const n: number = 'not a number'` passed.
    */
   lint: { options: { typeAware: true, typeCheck: true } },
+  /*
+   * The house style, stated so the formatter enforces it rather than fighting
+   * it. No semicolons and single quotes are what every file already used;
+   * `printWidth` was picked by measuring, not by taste — 110 moves the fewest
+   * lines of the widths tried, because it is close to where this code was
+   * already being wrapped by hand.
+   */
+  fmt: { semi: false, singleQuote: true, printWidth: 110 },
   server: {
     port: 5273,
     // *.localhost resolves to loopback in Chromium; allow the vanity host.

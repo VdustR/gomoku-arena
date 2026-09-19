@@ -100,11 +100,7 @@ check('playing out of turn is refused', outOfTurn.payload.error, 'not_your_turn'
 // A refusal names the position it was judged against, so a player that
 // decided against a different one can tell the board moved from being wrong.
 truthy('a refusal carries the version it was judged against', typeof occupied.payload.version === 'number')
-check(
-  'and that version is the one the board is on',
-  occupied.payload.version,
-  stillWhite.payload.version,
-)
+check('and that version is the one the board is on', occupied.payload.version, stillWhite.payload.version)
 check('a refusal says how many moves stood on the board', occupied.payload.moves, 1)
 check('nothing is claimed to have been rewound', occupied.payload.rewound, undefined)
 
@@ -161,15 +157,25 @@ truthy(
   'the refused double three is attached to the move that followed',
   reviewed.payload.moves.at(-1).rejected.some((r) => r.reason === 'double-three'),
 )
-check('a reported metric is labelled as such', (await call(alice, 'play', {
-  match_id: matchId,
-  seat: 'black',
-  point: 'M12',
-  note: 'testing self-reported metrics',
-  metrics: { input_tokens: 42 },
-})).isError, false)
+check(
+  'a reported metric is labelled as such',
+  (
+    await call(alice, 'play', {
+      match_id: matchId,
+      seat: 'black',
+      point: 'M12',
+      note: 'testing self-reported metrics',
+      metrics: { input_tokens: 42 },
+    })
+  ).isError,
+  false,
+)
 const withMetrics = await call(alice, 'review', { match_id: matchId })
-check('self-reported numbers are kept, marked reported', withMetrics.payload.moves.at(-1).metrics.source, 'reported')
+check(
+  'self-reported numbers are kept, marked reported',
+  withMetrics.payload.moves.at(-1).metrics.source,
+  'reported',
+)
 check('with the value the agent gave', withMetrics.payload.moves.at(-1).metrics.input_tokens, 42)
 
 /*
@@ -177,11 +183,13 @@ check('with the value the agent gave', withMetrics.payload.moves.at(-1).metrics.
  * this server's latency, so play can place the stone, wait for the opponent
  * and hand back the position that resulted.
  */
-const cycleMatch = (await call(alice, 'new_match', {
-  rule_set: 'free',
-  black: { kind: 'agent', label: 'black' },
-  white: { kind: 'agent', label: 'white' },
-})).payload.id
+const cycleMatch = (
+  await call(alice, 'new_match', {
+    rule_set: 'free',
+    black: { kind: 'agent', label: 'black' },
+    white: { kind: 'agent', label: 'white' },
+  })
+).payload.id
 
 const cycle = call(alice, 'play', {
   match_id: cycleMatch,
@@ -216,11 +224,13 @@ check('a wait that cannot be satisfied times out cleanly', timedOut.payload.time
  * without a hold anyone looking at either sees a live match that is not
  * moving — and a wait on it sits there pretending a turn is coming.
  */
-const heldMatch = (await call(alice, 'new_match', {
-  rule_set: 'free',
-  black: { kind: 'agent', label: 'black' },
-  white: { kind: 'agent', label: 'white' },
-})).payload.id
+const heldMatch = (
+  await call(alice, 'new_match', {
+    rule_set: 'free',
+    black: { kind: 'agent', label: 'black' },
+    white: { kind: 'agent', label: 'white' },
+  })
+).payload.id
 await call(alice, 'play', { match_id: heldMatch, seat: 'black', point: 'H8' })
 
 const held = await call(bob, 'pause_match', {
@@ -253,11 +263,7 @@ check('play works again', afterResume.isError, false)
 // Matches are independent: every one opened in this run is listed.
 const listed = await call(alice, 'list_matches', {})
 check('every match opened here is listed', listed.payload.matches.length, 4)
-check(
-  'and each carries its own id',
-  new Set(listed.payload.matches.map((m) => m.id)).size,
-  4,
-)
+check('and each carries its own id', new Set(listed.payload.matches.map((m) => m.id)).size, 4)
 
 /*
  * Take back reaches a player who is not on the screen that offers it.
@@ -267,11 +273,13 @@ check(
  * refusal it then gets has to say the board was rewound, or it reads as
  * "you played out of turn" and the agent has no reason to look again.
  */
-const rewindMatch = (await call(alice, 'new_match', {
-  rule_set: 'free',
-  black: { kind: 'human', label: 'someone at the board' },
-  white: { kind: 'agent', label: 'harness-white' },
-})).payload.id
+const rewindMatch = (
+  await call(alice, 'new_match', {
+    rule_set: 'free',
+    black: { kind: 'human', label: 'someone at the board' },
+    white: { kind: 'agent', label: 'harness-white' },
+  })
+).payload.id
 
 await call(alice, 'play', { match_id: rewindMatch, seat: 'black', point: 'H8' })
 await call(bob, 'play', { match_id: rewindMatch, seat: 'white', point: 'J9' })

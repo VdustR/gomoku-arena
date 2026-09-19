@@ -410,7 +410,8 @@ const jevMove: ModelAdapter = async ({ position, candidates, key, config, signal
         questions: {
           move: {
             type: 'choice',
-            instructions: 'Which move should you play next? Weigh your own winning threats against the opponent’s.',
+            instructions:
+              'Which move should you play next? Weigh your own winning threats against the opponent’s.',
             criteria,
           },
           pressure: {
@@ -573,7 +574,8 @@ export async function chooseMove({
         provider,
         model: 'forced move',
         ranked: [{ label: forced.label, weight: 1 }],
-        notes: forced.attack === 'five' ? 'Winning move played without asking.' : 'Only move that stops five.',
+        notes:
+          forced.attack === 'five' ? 'Winning move played without asking.' : 'Only move that stops five.',
       },
     }
   }

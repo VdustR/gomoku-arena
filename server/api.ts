@@ -125,8 +125,7 @@ function stream(req: IncomingMessage, res: ServerResponse, matchId: string): voi
 const idOf = (match: RegExpExecArray): string => match[1] ?? ''
 
 /** A seat named by a caller, or null. `play` refuses anything else by name. */
-const seatArg = (value: unknown): SeatName | null =>
-  value === 'black' || value === 'white' ? value : null
+const seatArg = (value: unknown): SeatName | null => (value === 'black' || value === 'white' ? value : null)
 
 const text = (value: unknown): string | null => (typeof value === 'string' ? value : null)
 const count = (value: unknown): number | undefined => (typeof value === 'number' ? value : undefined)

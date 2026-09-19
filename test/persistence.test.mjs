@@ -87,7 +87,10 @@ check('with its reason', whiteMove.rejected[0].reason, 'occupied')
 check('and the point that was refused', whiteMove.rejected[0].point, 'H8')
 
 const listed = (await json(second.base, '/api/matches')).body
-truthy('the restored match is listed', listed.matches.some((m) => m.id === id))
+truthy(
+  'the restored match is listed',
+  listed.matches.some((m) => m.id === id),
+)
 
 /*
  * The stored file holds the move list and nothing derived from it. A board,
@@ -157,7 +160,10 @@ writeFileSync(
   JSON.stringify({
     id: 'stale-record',
     ruleSet: 'free',
-    seats: { 1: { kind: 'human', label: null, assist: 'free' }, 2: { kind: 'human', label: null, assist: 'free' } },
+    seats: {
+      1: { kind: 'human', label: null, assist: 'free' },
+      2: { kind: 'human', label: null, assist: 'free' },
+    },
     history: [],
     rejected: { 1: [], 2: [] },
     // The fields that make it stale: all four are replayed, never stored.
@@ -173,8 +179,15 @@ writeFileSync(
 
 const fifth = await startServer({ GOMOKU_STATE_DIR: STATE_DIR })
 const survivors = (await json(fifth.base, '/api/matches')).body.matches
-truthy('a readable record still loads beside unreadable ones', survivors.some((m) => m.id === id))
-check('the stale record is not loaded', survivors.some((m) => m.id === 'stale-record'), false)
+truthy(
+  'a readable record still loads beside unreadable ones',
+  survivors.some((m) => m.id === id),
+)
+check(
+  'the stale record is not loaded',
+  survivors.some((m) => m.id === 'stale-record'),
+  false,
+)
 truthy('the unreadable file is left where it is', existsSync(garbage))
 truthy('and so is the stale one', existsSync(preRefactor))
 await stop(fifth.child)

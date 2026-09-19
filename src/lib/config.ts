@@ -52,7 +52,9 @@ export const text = (value: EnvValue, fallback: string): string => {
 }
 
 export const flag = (value: EnvValue, fallback: boolean): boolean => {
-  const trimmed = String(value ?? '').trim().toLowerCase()
+  const trimmed = String(value ?? '')
+    .trim()
+    .toLowerCase()
   if (trimmed === '') return fallback
   return ['1', 'true', 'yes', 'on'].includes(trimmed)
 }
@@ -84,7 +86,9 @@ export const count = (
  * straight to the rules without a second check.
  */
 export const oneOf = <T extends string>(value: EnvValue, allowed: readonly T[], fallback: T): T => {
-  const trimmed = String(value ?? '').trim().toLowerCase()
+  const trimmed = String(value ?? '')
+    .trim()
+    .toLowerCase()
   return (allowed as readonly string[]).includes(trimmed) ? (trimmed as T) : fallback
 }
 

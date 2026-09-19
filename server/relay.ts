@@ -25,7 +25,9 @@ const MAX_BODY_BYTES = 1_000_000
  */
 const UPSTREAM_TIMEOUT_MS = Number(process.env['GOMOKU_UPSTREAM_TIMEOUT_MS'] ?? 60_000) || 60_000
 const ALLOW_INSECURE_HTTP = ['1', 'true', 'yes', 'on'].includes(
-  String(process.env['GOMOKU_ALLOW_INSECURE_HTTP'] ?? '').trim().toLowerCase(),
+  String(process.env['GOMOKU_ALLOW_INSECURE_HTTP'] ?? '')
+    .trim()
+    .toLowerCase(),
 )
 
 /**
@@ -143,7 +145,9 @@ function assertRelayableUrl(value: string): URL {
   if (url.protocol === 'https:') return url
   if (url.protocol === 'http:' && (loopback || ALLOW_INSECURE_HTTP)) return url
   if (url.protocol === 'http:') {
-    throw new Error('endpoint must use https, or http on localhost (set GOMOKU_ALLOW_INSECURE_HTTP=true to override)')
+    throw new Error(
+      'endpoint must use https, or http on localhost (set GOMOKU_ALLOW_INSECURE_HTTP=true to override)',
+    )
   }
   throw new Error(`unsupported protocol: ${url.protocol}`)
 }
@@ -155,7 +159,10 @@ interface Forward {
   timeoutMs?: number
 }
 
-async function forward(res: ServerResponse, { url, key, body, timeoutMs = UPSTREAM_TIMEOUT_MS }: Forward): Promise<void> {
+async function forward(
+  res: ServerResponse,
+  { url, key, body, timeoutMs = UPSTREAM_TIMEOUT_MS }: Forward,
+): Promise<void> {
   const abort = new AbortController()
   const timer = setTimeout(() => abort.abort(), timeoutMs)
   const startedAt = performance.now()
