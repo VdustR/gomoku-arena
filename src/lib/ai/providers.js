@@ -13,7 +13,7 @@
 
 import { candidateMoves, describePosition } from './heuristic.js'
 import { ENGINES } from './engines.js'
-import { BLACK } from '../rules.js'
+import { BLACK } from '../rules.ts'
 
 /** Chrome's built-in model is on-device: no key, no network, no cost. */
 export const BROWSER_ID = 'browser'

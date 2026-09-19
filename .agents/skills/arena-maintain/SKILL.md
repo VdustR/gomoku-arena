@@ -58,6 +58,33 @@ instructions cover. `releaseWaiters` answers them first, and `server/index.js`
 calls it on SIGINT and SIGTERM. Anything that ends the process deliberately
 must go through there.
 
+## Types
+
+The tree is moving to TypeScript at the strict settings, module by module, and
+the suite stays green at every step. Three decisions are settled, so do not
+re-open them halfway:
+
+**Vite+ is the type checker.** `vp check` runs the type-aware path through
+tsgolint against `tsconfig.json`; `pnpm check` is the command. There is no
+second toolchain and no `typescript` dependency. This was verified rather than
+assumed — with `lint.options.typeCheck` off, a deliberate
+`const n: number = 'not a number'` passed.
+
+**The server runs from source.** Node strips types per file, so
+`node server/index.ts` and the plain-node test suites work with no build step.
+That is what `erasableSyntaxOnly` protects: no enums, no namespaces, no
+parameter properties, and `import type` where a type is what is meant. An
+import names the real file — `./rules.ts`, not `./rules.js`.
+
+**A converted module keeps working for the ones that have not been converted.**
+`allowJs` is on and `checkJs` is off, so a `.ts` module may import a `.js` one
+without it becoming `any`, and the modules still waiting their turn are not
+reported as though they had been done badly. Both come out when the last one
+lands.
+
+No `any`. A hard spot is where the modelling is wrong, and the modelling is
+what this is for.
+
 ## The suite
 
 `pnpm test` runs ten suites and needs no network. Server-backed suites take a

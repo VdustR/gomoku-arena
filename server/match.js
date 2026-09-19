@@ -29,7 +29,7 @@ import {
   winningLine,
   RULE_SETS,
   FORBIDDEN_COPY,
-} from '../src/lib/rules.js'
+} from '../src/lib/rules.ts'
 import { candidateMoves } from '../src/lib/ai/heuristic.js'
 import { FORMAT_VERSION, readRecord } from './record.js'
 

@@ -1,4 +1,4 @@
-import { SIZE, BLACK, WHITE, EMPTY, createBoard, idx, moveLegality, resolveMove, forbiddenReason } from '../src/lib/rules.js'
+import { BLACK, WHITE, createBoard, idx, moveLegality, resolveMove, forbiddenReason } from '../src/lib/rules.ts'
 
 let pass = 0, fail = 0
 const check = (name, actual, expected) => {

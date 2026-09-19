@@ -81,7 +81,7 @@ for (const derived of ['board', 'turn', 'status', 'winner', 'winningStones']) {
  */
 const preRefactor = current()
 delete preRefactor.formatVersion
-preRefactor.board = new Array(225).fill(0)
+preRefactor.board = Array.from({ length: 225 }, () => 0)
 preRefactor.turn = 1
 preRefactor.status = 'playing'
 preRefactor.winner = null

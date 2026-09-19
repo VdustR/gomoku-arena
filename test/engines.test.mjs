@@ -6,7 +6,7 @@
  * produce a move the board would refuse, and come back inside their budget.
  */
 
-import { BLACK, WHITE, createBoard, idx, moveLegality, makesFive } from '../src/lib/rules.js'
+import { BLACK, WHITE, createBoard, idx, moveLegality, makesFive } from '../src/lib/rules.ts'
 import { ENGINES } from '../src/lib/ai/engines.js'
 
 let pass = 0

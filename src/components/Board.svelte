@@ -1,6 +1,6 @@
 <script>
-  import { SIZE, BLACK, WHITE, EMPTY, idx, coordLabel } from '../lib/rules.js'
-  import { moveLegality } from '../lib/rules.js'
+  import { SIZE, BLACK, WHITE, EMPTY, idx, coordLabel } from '../lib/rules.ts'
+  import { moveLegality } from '../lib/rules.ts'
 
   let {
     board,

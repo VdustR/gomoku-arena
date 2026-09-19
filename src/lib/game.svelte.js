@@ -7,7 +7,7 @@
  * drives whichever in-page engines are seated.
  */
 
-import { BLACK, WHITE, SIZE, createBoard, idx, coordLabel, FORBIDDEN_COPY } from './rules.js'
+import { BLACK, WHITE, SIZE, createBoard, idx, coordLabel, FORBIDDEN_COPY } from './rules.ts'
 import { chooseMove, PROVIDERS, DEFAULT_ENGINE_ID, colorName } from './ai/providers.js'
 import { keyFor, configFor } from './settings.svelte.js'
 import { serverCovers, serverProblem } from './relay.svelte.js'
