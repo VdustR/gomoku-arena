@@ -47,6 +47,8 @@ export const game = $state({
   /** The review record, once loaded, and where the reader is in it. */
   review: null,
   reviewAt: 0,
+  /** When the side to move was handed the turn, for the waiting indicator. */
+  turnSince: Date.now(),
 })
 
 let source = null
@@ -117,6 +119,14 @@ function applyState(view) {
   for (const seat of ['black', 'white']) {
     game.seats[seat] = { ...view.seats[seat], provider: providerBySeat[seat] }
   }
+
+  /*
+   * The server does not publish when a turn began, but every change to a
+   * match bumps updatedAt, and the change that hands over the turn is the
+   * last move. Close enough to show how long a side has been on move, and it
+   * needs no round trip of its own.
+   */
+  game.turnSince = Date.parse(view.updatedAt) || Date.now()
   if (game.status !== 'playing') game.autoplay = false
 }
 

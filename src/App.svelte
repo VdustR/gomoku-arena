@@ -3,6 +3,7 @@
   import Telemetry from './components/Telemetry.svelte'
   import SettingsDialog from './components/Settings.svelte'
   import Review from './components/Review.svelte'
+  import MatchPanel from './components/MatchPanel.svelte'
   import {
     game,
     playHuman,
@@ -231,71 +232,32 @@
     </div>
 
     <div class="controls">
-      <section class="panel">
-        <h3>Match</h3>
-        <div class="segmented" role="group" aria-label="Match type">
-          {#each [['pvp', 'You vs you'], ['pvc', 'You vs AI'], ['cvc', 'AI vs AI']] as [id, label]}
-            <button class:active={activePreset === id} onclick={() => setPreset(id)}>{label}</button>
-          {/each}
-        </div>
-
-        <div class="seats">
-          {#each [[BLACK, 'Black'], [WHITE, 'White']] as [color, name]}
-            <div class="seat">
-              <span class="seat-name">
-                <span class="disc" class:white={color === WHITE}></span>
-                {name}
-              </span>
-              <select
-                value={seatFor(color).kind === 'engine' ? seatFor(color).provider : seatFor(color).kind}
-                onchange={(e) => onSeatChange(color, e.currentTarget.value)}
-              >
-                {#each seatOptions as group}
-                  <optgroup label={group.label}>
-                    {#each group.options as option}
-                      <option value={option.id}>
-                        {option.name}{option.note ? ` — ${option.note}` : ''}
-                      </option>
-                    {/each}
-                  </optgroup>
-                {/each}
-              </select>
-            </div>
-          {/each}
-        </div>
-      </section>
-
-      <section class="panel">
-        <h3>Rules</h3>
-        <div class="segmented" role="group" aria-label="Rule set">
-          {#each Object.values(RULE_SETS) as rule}
-            <button class:active={game.ruleSet === rule.id} onclick={() => setRuleSet(rule.id)}>
-              {rule.name}
-            </button>
-          {/each}
-        </div>
-        <p class="rule-blurb">{RULE_SETS[game.ruleSet].blurb}</p>
-      </section>
+      <MatchPanel
+        {game}
+        {seatOptions}
+        {activePreset}
+        {describeSeat}
+        onseatchange={onSeatChange}
+        onpreset={setPreset}
+        onruleset={setRuleSet}
+        onclear={resetGame}
+      />
 
       <div class="actions">
+        <button class="secondary" onclick={undoLastPair} disabled={game.history.length === 0 || game.thinking}>
+          Take back
+        </button>
         {#if game.thinking}
-          <button class="secondary" onclick={stopThinking}>Stop</button>
-        {:else if activePreset === 'cvc' && game.status === 'playing'}
-          <button class="secondary" onclick={() => (game.autoplay = !game.autoplay)}>
-            {game.autoplay ? 'Pause' : 'Continue'}
+          <button class="primary" onclick={stopThinking}>Stop thinking</button>
+        {:else if bothSeatsAi && game.status === 'playing'}
+          <button class="primary" onclick={() => (game.autoplay = !game.autoplay)}>
+            {game.autoplay ? 'Pause' : 'Play on'}
           </button>
         {:else}
-          <button class="secondary" onclick={undoLastPair} disabled={game.history.length === 0}>Undo</button>
+          <button class="primary" onclick={loadReview} disabled={game.history.length === 0}>Review</button>
         {/if}
-        <button class="primary" onclick={() => resetGame()}>New game</button>
       </div>
 
-      {#if !game.review && game.history.length > 0}
-        <button class="review-open" onclick={loadReview}>
-          Review this game
-          <span class="tnum">{game.history.length} moves</span>
-        </button>
-      {/if}
 
       {#if game.review}
         <Review
@@ -547,69 +509,11 @@
     color: var(--text-lo);
   }
 
-  .segmented {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: 1fr;
-    gap: 3px;
-    padding: 3px;
-    background: var(--ink-850);
-    border-radius: 10px;
-  }
 
-  .segmented button {
-    background: none;
-    border: none;
-    border-radius: 7px;
-    padding: 0.45rem 0.4rem;
-    font-size: 0.8125rem;
-    color: var(--text-lo);
-    cursor: pointer;
-    transition:
-      background 180ms var(--ease-out),
-      color 180ms var(--ease-out);
-  }
-  .segmented button:hover {
-    color: var(--text-hi);
-  }
-  .segmented button.active {
-    background: var(--ink-700);
-    color: var(--text-hi);
-    box-shadow: 0 1px 3px rgb(0 0 0 / 0.4);
-  }
 
-  .seats {
-    display: grid;
-    gap: 0.5rem;
-  }
 
-  .seat {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    font-size: 0.8125rem;
-  }
 
-  .seat-name {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    color: var(--text);
-  }
 
-  select {
-    background: var(--ink-850);
-    border: 1px solid var(--ink-600);
-    border-radius: var(--radius-sm);
-    padding: 0.35rem 0.5rem;
-    font-size: 0.8125rem;
-    max-width: 13.5rem;
-    cursor: pointer;
-  }
-  select:hover {
-    border-color: var(--ink-500);
-  }
 
   .mcp p {
     margin: 0;
@@ -633,12 +537,8 @@
     color: var(--text);
   }
 
-  .rule-blurb {
-    margin: 0;
-    font-size: 0.8125rem;
-    color: var(--text-lo);
-    line-height: 1.6;
-  }
+
+
 
   .actions {
     display: grid;
@@ -683,31 +583,6 @@
     border-color: var(--amber-hi);
   }
 
-  .review-open {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    width: 100%;
-    background: var(--ink-750);
-    border: 1px solid var(--ink-600);
-    border-radius: var(--radius-sm);
-    padding: 0.65rem 0.9rem;
-    font-size: 0.875rem;
-    color: var(--text);
-    cursor: pointer;
-    transition:
-      border-color 160ms var(--ease-out),
-      color 160ms var(--ease-out);
-  }
-  .review-open:hover {
-    border-color: var(--amber);
-    color: var(--text-hi);
-  }
-  .review-open span {
-    font-size: 0.75rem;
-    color: var(--text-lo);
-  }
 
   .how {
     display: grid;
