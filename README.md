@@ -212,7 +212,7 @@ file. `CLAUDE.md` is a symlink to `AGENTS.md` for the same reason.
 pnpm test
 ```
 
-Nine suites, no network needed:
+Ten suites, no network needed:
 
 | Suite | Covers |
 | --- | --- |
@@ -221,6 +221,7 @@ Nine suites, no network needed:
 | `test/engines.test.mjs` | Each search engine takes a win, blocks a loss, and never offers a forbidden move |
 | `test/providers.test.mjs` | Reading a move index out of whatever a model replied with |
 | `test/review.test.mjs` | What a finished game reports, and which figures keep their source |
+| `test/record.test.mjs` | The stored shape, its version, and what happens to a file that is not it |
 | `test/persistence.test.mjs` | A match replayed from its file alone, across three servers, and what is not written |
 | `test/lifecycle.test.mjs` | What is evicted and what is kept, and a held call answered when the server stops |
 | `test/relay.test.mjs` | Key handling, endpoint pinning, and route ownership, against a live server |
@@ -288,7 +289,7 @@ server/api.js           Match REST and the browser's event stream
 server/relay.js         Forwards model requests that refuse browser origins
 server/routes.js        One pipeline, shared by the dev server and `pnpm start`
 server/index.js         `pnpm start`: serves dist/ and the routes
-test/                   Nine suites; see Tests above
+test/                   Ten suites; see Tests above
 ```
 
 ## References

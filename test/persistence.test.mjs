@@ -6,7 +6,7 @@
  * mid-match cannot recover from that and have no reason to expect it.
  */
 
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { startServer, stop, reporter } from './helpers.mjs'
@@ -97,6 +97,7 @@ truthy('the restored match is listed', listed.matches.some((m) => m.id === id))
 const files = readdirSync(STATE_DIR).filter((name) => name.endsWith('.json'))
 check('one file per match', files.length, 1)
 const stored = JSON.parse(readFileSync(join(STATE_DIR, files[0]), 'utf8'))
+check('the record says which shape it is', stored.formatVersion, 1)
 check('the move list is stored', stored.history.length, 4)
 check('the rules are stored', stored.ruleSet, 'renju')
 truthy('the seats are stored', Boolean(stored.seats))
@@ -140,6 +141,43 @@ check('a stale move is refused', refused.body.error, 'not_your_turn')
 check('and the refusal still carries the take-back', refused.body.rewound.dropped, 1)
 truthy('with the version it was judged against', typeof refused.body.version === 'number')
 await stop(fourth.child)
+
+/*
+ * A file this server cannot read is one match it will not show, not a broken
+ * store — and it is left where it is. Four pre-refactor records sat in a
+ * working directory this week and loaded without complaint; refusing them is
+ * the point, but deleting somebody's game because it could not be parsed is
+ * worse than saying so and leaving it alone.
+ */
+const garbage = join(STATE_DIR, 'not-json.json')
+const preRefactor = join(STATE_DIR, 'pre-refactor.json')
+writeFileSync(garbage, '{ this is not json')
+writeFileSync(
+  preRefactor,
+  JSON.stringify({
+    id: 'stale-record',
+    ruleSet: 'free',
+    seats: { 1: { kind: 'human', label: null, assist: 'free' }, 2: { kind: 'human', label: null, assist: 'free' } },
+    history: [],
+    rejected: { 1: [], 2: [] },
+    // The fields that make it stale: all four are replayed, never stored.
+    board: new Array(225).fill(0),
+    turn: 1,
+    status: 'playing',
+    winner: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    version: 0,
+  }),
+)
+
+const fifth = await startServer({ GOMOKU_STATE_DIR: STATE_DIR })
+const survivors = (await json(fifth.base, '/api/matches')).body.matches
+truthy('a readable record still loads beside unreadable ones', survivors.some((m) => m.id === id))
+check('the stale record is not loaded', survivors.some((m) => m.id === 'stale-record'), false)
+truthy('the unreadable file is left where it is', existsSync(garbage))
+truthy('and so is the stale one', existsSync(preRefactor))
+await stop(fifth.child)
 
 rmSync(STATE_DIR, { recursive: true, force: true })
 done()
