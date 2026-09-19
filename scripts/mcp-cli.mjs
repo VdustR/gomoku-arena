@@ -11,7 +11,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 
 const [tool, ...rest] = process.argv.slice(2)
 if (!tool) {
-  console.error('usage: node scripts/mcp-cli.mjs <tool> \'<json args>\'')
+  console.error("usage: node scripts/mcp-cli.mjs <tool> '<json args>'")
   process.exit(2)
 }
 const url = process.env.GOMOKU_MCP_URL ?? 'http://localhost:5273/mcp'

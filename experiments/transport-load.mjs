@@ -148,7 +148,12 @@ const keys = ['mcp@1', 'http@1', `mcp@${CONCURRENCY}`, `http@${CONCURRENCY}`]
 const line = (name, get) =>
   `${name.padEnd(18)} ${keys.map((k) => String(get(report[k])).padStart(12)).join('')}`
 
-console.log(`${header[0].padEnd(18)} ${header.slice(1).map((h) => h.padStart(12)).join('')}`)
+console.log(
+  `${header[0].padEnd(18)} ${header
+    .slice(1)
+    .map((h) => h.padStart(12))
+    .join('')}`,
+)
 console.log('-'.repeat(66))
 console.log(line('failures', (r) => r.failures))
 console.log(line('failure rate', (r) => `${(r.failureRate * 100).toFixed(3)}%`))

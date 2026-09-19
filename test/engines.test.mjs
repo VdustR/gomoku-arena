@@ -49,7 +49,11 @@ for (const engine of Object.values(ENGINES)) {
   // White has four in a row; black must block or lose next move.
   const mustBlock = board([...row(7, [3, 4, 5, 6], WHITE), [9, 9, BLACK]])
   const block = engine.run(mustBlock, BLACK, 'free', opts)
-  truthy(`${engine.name}: blocks an immediate loss`, ['C8', 'H8'].includes(block.point), `played ${block.point}`)
+  truthy(
+    `${engine.name}: blocks an immediate loss`,
+    ['C8', 'H8'].includes(block.point),
+    `played ${block.point}`,
+  )
 
   // Renju forbids black a double three; no engine may offer one.
   const trap = board([...row(7, [5, 6], BLACK), [7, 5, BLACK], [7, 6, BLACK], [0, 0, WHITE]])

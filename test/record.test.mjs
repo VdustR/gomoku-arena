@@ -129,7 +129,11 @@ check('null is not a record', readRecord(null).ok, false)
 check('a version that is not a number is refused', readRecord(current({ formatVersion: 'one' })).ok, false)
 
 // A field of the right name and the wrong type is still wrong.
-check('a rule set this server does not know is refused', readRecord(current({ ruleSet: 'tic-tac-toe' })).ok, false)
+check(
+  'a rule set this server does not know is refused',
+  readRecord(current({ ruleSet: 'tic-tac-toe' })).ok,
+  false,
+)
 check('a missing move list is refused', readRecord(current({ history: undefined })).ok, false)
 
 done()

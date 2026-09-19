@@ -302,10 +302,12 @@ console.log('reliability')
 console.log(row('  refused moves', (r) => r.refused))
 console.log(row('  transport errors', (r) => r.transportErrors))
 console.log(row('  decision errors', (r) => r.decisionErrors))
-console.log(row('  failure rate', (r) => {
-  const attempts = r.turns + r.transportErrors + r.refused
-  return attempts ? `${((100 * (r.transportErrors + r.refused)) / attempts).toFixed(2)}%` : '-'
-}))
+console.log(
+  row('  failure rate', (r) => {
+    const attempts = r.turns + r.transportErrors + r.refused
+    return attempts ? `${((100 * (r.transportErrors + r.refused)) / attempts).toFixed(2)}%` : '-'
+  }),
+)
 console.log('')
 console.log('read the position')
 console.log(row('  median (ms)', (r) => r.read.medianMs ?? '-'))

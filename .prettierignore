@@ -1,0 +1,11 @@
+# The formatter runs over code, not prose.
+#
+# It does not rewrap paragraphs, but it does pad every Markdown table to align
+# its columns, which turns a readable source row into a 180-character one. The
+# prose here — the README, the product record and the three skills — is wrapped
+# by hand for reading, and that is worth more than aligned pipes.
+*.md
+
+# Generated.
+dist/
+.matches/

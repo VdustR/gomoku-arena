@@ -85,13 +85,28 @@ const webm = await video.path()
 
 /** Playwright writes WebM; deliver H.264 so it plays inline. */
 await new Promise((done, failed) => {
-  const ff = spawn('ffmpeg', [
-    '-y', '-i', webm,
-    '-c:v', 'libx264', '-preset', 'medium', '-crf', '26',
-    '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
-    '-vf', 'scale=1280:-2',
-    OUT,
-  ], { stdio: ['ignore', 'ignore', 'pipe'] })
+  const ff = spawn(
+    'ffmpeg',
+    [
+      '-y',
+      '-i',
+      webm,
+      '-c:v',
+      'libx264',
+      '-preset',
+      'medium',
+      '-crf',
+      '26',
+      '-pix_fmt',
+      'yuv420p',
+      '-movflags',
+      '+faststart',
+      '-vf',
+      'scale=1280:-2',
+      OUT,
+    ],
+    { stdio: ['ignore', 'ignore', 'pipe'] },
+  )
   let err = ''
   ff.stderr.on('data', (d) => (err += d))
   ff.on('exit', (code) => (code === 0 ? done() : failed(new Error(err.slice(-600)))))

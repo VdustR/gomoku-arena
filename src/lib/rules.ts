@@ -131,9 +131,7 @@ function runThroughCentre(cells: readonly Stone[], color: Side): number {
 
 /** Runs formed at (x, y) along each axis, assuming `color` was just played. */
 function runsAt(board: Board, x: number, y: number, color: Side, size: number): number[] {
-  return DIRECTIONS.map(([dx, dy]) =>
-    runThroughCentre(lineWindow(board, x, y, dx, dy, color, size), color),
-  )
+  return DIRECTIONS.map(([dx, dy]) => runThroughCentre(lineWindow(board, x, y, dx, dy, color, size), color))
 }
 
 export interface FiveOptions {
@@ -152,25 +150,12 @@ export function makesFive(
   return runsAt(board, x, y, color, size).some((run) => (exact ? run === 5 : run >= 5))
 }
 
-export function makesOverline(
-  board: Board,
-  x: number,
-  y: number,
-  color: Side,
-  size: number = SIZE,
-): boolean {
+export function makesOverline(board: Board, x: number, y: number, color: Side, size: number = SIZE): boolean {
   return runsAt(board, x, y, color, size).some((run) => run >= 6)
 }
 
 /** Empty points within four cells of (x, y) along one axis. */
-function lineCandidates(
-  board: Board,
-  x: number,
-  y: number,
-  dx: number,
-  dy: number,
-  size: number,
-): Point[] {
+function lineCandidates(board: Board, x: number, y: number, dx: number, dy: number, size: number): Point[] {
   const points: Point[] = []
   for (let step = -4; step <= 4; step += 1) {
     if (step === 0) continue
@@ -185,14 +170,7 @@ function lineCandidates(
  * Does placing black at (x, y) create a four along this axis — a run of four
  * that one more stone turns into exactly five?
  */
-function isFourOnAxis(
-  board: Board,
-  x: number,
-  y: number,
-  dx: number,
-  dy: number,
-  size: number,
-): boolean {
+function isFourOnAxis(board: Board, x: number, y: number, dx: number, dy: number, size: number): boolean {
   const run = runThroughCentre(lineWindow(board, x, y, dx, dy, BLACK, size), BLACK)
   if (run !== 4) return false
   const probe = board.slice()
@@ -206,14 +184,7 @@ function isFourOnAxis(
 }
 
 /** An open four: four in a row that can be completed to five from either end. */
-function isOpenFourOnAxis(
-  board: Board,
-  x: number,
-  y: number,
-  dx: number,
-  dy: number,
-  size: number,
-): boolean {
+function isOpenFourOnAxis(board: Board, x: number, y: number, dx: number, dy: number, size: number): boolean {
   const cells = lineWindow(board, x, y, dx, dy, BLACK, size)
   if (runThroughCentre(cells, BLACK) !== 4) return false
   let low = RADIUS
@@ -343,13 +314,7 @@ export function resolveMove(
 }
 
 /** The stones making up the winning run, for highlighting it on the board. */
-export function winningLine(
-  board: Board,
-  x: number,
-  y: number,
-  color: Side,
-  size: number = SIZE,
-): Point[] {
+export function winningLine(board: Board, x: number, y: number, color: Side, size: number = SIZE): Point[] {
   for (const [dx, dy] of DIRECTIONS) {
     const stones: Point[] = [[x, y]]
     for (const sign of [-1, 1]) {

@@ -157,7 +157,9 @@ export function buildMcpServer() {
         rule_set: z
           .enum(['free', 'renju'])
           .optional()
-          .describe('free (default): five or more in a row wins. renju: black may not play an overline, double four, or double three.'),
+          .describe(
+            'free (default): five or more in a row wins. renju: black may not play an overline, double four, or double three.',
+          ),
         black: seatConfig,
         white: seatConfig,
         seat: seatArg.optional().describe('Return the opening state from this seat’s point of view.'),
@@ -236,12 +238,16 @@ export function buildMcpServer() {
       inputSchema: {
         match_id: z.string(),
         seat: seatArg,
-        point: z.string().describe('Column letter then row number, e.g. H8. Columns skip I; row 15 is the top.'),
+        point: z
+          .string()
+          .describe('Column letter then row number, e.g. H8. Columns skip I; row 15 is the top.'),
         note: z
           .string()
           .max(400)
           .optional()
-          .describe('Why you chose this point. Kept in the move log and shown in the review, so write what you were actually weighing.'),
+          .describe(
+            'Why you chose this point. Kept in the move log and shown in the review, so write what you were actually weighing.',
+          ),
         wait_ms: z
           .number()
           .int()
@@ -255,7 +261,10 @@ export function buildMcpServer() {
           .object({
             input_tokens: z.number().optional(),
             output_tokens: z.number().optional(),
-            thinking_ms: z.number().optional().describe('Your own measure of how long you spent, if you have one.'),
+            thinking_ms: z
+              .number()
+              .optional()
+              .describe('Your own measure of how long you spent, if you have one.'),
             model: z.string().optional(),
           })
           .passthrough()
@@ -321,7 +330,9 @@ export function buildMcpServer() {
           .string()
           .max(200)
           .optional()
-          .describe('Why the game is being held, and whether it is coming back. Shown to anyone looking at the match.'),
+          .describe(
+            'Why the game is being held, and whether it is coming back. Shown to anyone looking at the match.',
+          ),
       },
     },
     guard(async ({ match_id, paused, by, note }) =>

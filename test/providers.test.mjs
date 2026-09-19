@@ -33,7 +33,11 @@ check('prose naming a number', parseChoiceIndex('I choose move 5 because it bloc
 check('status line before the JSON', parseChoiceIndex('On-device model ready\n{"choice": 1}', 8), 1)
 check('index zero is a real answer', parseChoiceIndex('{"choice": 0}', 8), 0)
 check('whitespace and code fences', parseChoiceIndex('```json\n{"choice": 4}\n```', 8), 4)
-check('an out-of-range JSON value falls back to a usable number', parseChoiceIndex('{"choice": 99} or 6', 8), 6)
+check(
+  'an out-of-range JSON value falls back to a usable number',
+  parseChoiceIndex('{"choice": 99} or 6', 8),
+  6,
+)
 
 rejects('prose with no number', 'On-device something went wrong', 8)
 rejects('only out-of-range numbers', '42', 8)

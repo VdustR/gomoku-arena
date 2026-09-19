@@ -213,11 +213,11 @@ pnpm test
 pnpm check
 ```
 
-`pnpm check` runs the lint and type checks: Vite+'s type-aware path through
-tsgolint for `.ts`, and `svelte-check` for the components, which Vite+ does
-not read. Both go against the strict settings in `tsconfig.json`. The
-formatter is left out on purpose — `vp fmt` wants semicolons and this project
-has none.
+`pnpm check` runs format, lint and type checks: `vp fmt`, Vite+'s type-aware
+path through tsgolint for `.ts`, and `svelte-check` for the components, which
+Vite+ does not read. The type checks go against the strict settings in
+`tsconfig.json`; the formatting style is in the `fmt` block of
+`vite.config.ts`, and `.prettierignore` keeps the formatter off the prose.
 
 Everything under `src/` and `server/` is TypeScript, and the server runs from
 source: Node strips types per file, so there is no build step outside the

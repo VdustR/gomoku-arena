@@ -33,7 +33,15 @@ import {
 import type { Board, IllegalReason, Point, RuleSetId, Side } from '../src/lib/rules.ts'
 import { candidateMoves } from '../src/lib/ai/heuristic.ts'
 import { FORMAT_VERSION, readRecord } from './record.ts'
-import type { Hold, Rewind, StoredMatch, StoredMetrics, StoredMove, StoredRefusal, StoredSeat } from './record.ts'
+import type {
+  Hold,
+  Rewind,
+  StoredMatch,
+  StoredMetrics,
+  StoredMove,
+  StoredRefusal,
+  StoredSeat,
+} from './record.ts'
 
 /**
  * The live match, as opposed to the stored one.
@@ -305,7 +313,6 @@ export function replay({
   return match
 }
 
-
 /**
  * Write a match, and say so in its type.
  *
@@ -441,10 +448,15 @@ function parsePoint(value: PointArg): { x: number; y: number } {
   if (value && typeof value === 'object' && 'x' in value && 'y' in value) {
     return { x: Number(value.x), y: Number(value.y) }
   }
-  const label = String(value ?? '').trim().toUpperCase()
+  const label = String(value ?? '')
+    .trim()
+    .toUpperCase()
   const match = /^([A-HJ-Z])(\d{1,2})$/.exec(label)
   if (!match) {
-    throw new MatchError('bad_point', `Not a point on this board: ${String(value)}. Use a label like H8, or {x, y}.`)
+    throw new MatchError(
+      'bad_point',
+      `Not a point on this board: ${String(value)}. Use a label like H8, or {x, y}.`,
+    )
   }
   const x = COLUMNS.indexOf(match[1] ?? '')
   const y = SIZE - Number(match[2])
@@ -559,7 +571,12 @@ function trim(
  */
 function evictOldest(keepId: string | null = null): void {
   const all = [...matches.values()]
-  trim(all.filter((match) => !isFinished(match)), MAX_MATCHES, keepId, evictionTier)
+  trim(
+    all.filter((match) => !isFinished(match)),
+    MAX_MATCHES,
+    keepId,
+    evictionTier,
+  )
   trim(all.filter(isFinished), MAX_FINISHED, keepId, () => 0)
 }
 
@@ -688,8 +705,7 @@ export function publicMatch(
   { seat = null, includeCandidates = null }: ViewOptions = {},
 ): PublicMatch {
   const color = seat ? SEATS[seat] : null
-  const wantCandidates =
-    includeCandidates ?? (color ? match.seats[color].assist === 'shortlist' : false)
+  const wantCandidates = includeCandidates ?? (color ? match.seats[color].assist === 'shortlist' : false)
 
   const view: PublicMatch = {
     id: match.id,
@@ -1162,7 +1178,10 @@ export interface HoldRequest {
   note?: string | null
 }
 
-export function pauseMatch(matchId: string, { paused = true, by = null, note = null }: HoldRequest = {}): Saved {
+export function pauseMatch(
+  matchId: string,
+  { paused = true, by = null, note = null }: HoldRequest = {},
+): Saved {
   const match = getMatch(matchId)
   if (match.status !== 'playing') {
     throw new MatchError('match_over', `This match is already finished: ${match.status}.`, {

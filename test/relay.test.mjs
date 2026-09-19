@@ -90,11 +90,7 @@ const capable = await fetch(`${RELAY_BASE}/api/relay`).then((r) => r.json())
 check('the server says which providers it can cover', capable.providers.jev.canCover, true)
 check('and which it cannot', capable.providers.openai.canCover, false)
 check('a configured provider reports no problem', capable.providers.jev.problem, null)
-check(
-  'nothing of the key itself is published',
-  JSON.stringify(capable).includes(SERVER_KEY),
-  false,
-)
+check('nothing of the key itself is published', JSON.stringify(capable).includes(SERVER_KEY), false)
 
 const viaCallerKey = await call('/api/jev', { baseUrl: CALLER_BASE, request: {} }, 'caller-key')
 check('a caller key may name its own endpoint', viaCallerKey.json.body?.reachedBy, 'caller')
@@ -105,7 +101,11 @@ check(
   (await call('/api/jev', { baseUrl: 'http://evil.example.com/v1', request: {} }, 'k')).status,
   400,
 )
-check('an unknown route under /api is a JSON 404', (await call('/api/nope', { baseUrl: CALLER_BASE, request: {} }, 'k')).status, 404)
+check(
+  'an unknown route under /api is a JSON 404',
+  (await call('/api/nope', { baseUrl: CALLER_BASE, request: {} }, 'k')).status,
+  404,
+)
 check(
   'a missing key is a 401',
   (await call('/api/openai', { baseUrl: CALLER_BASE, request: {} })).status,

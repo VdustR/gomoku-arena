@@ -148,13 +148,7 @@ export function minimaxMove(
   let cutoffs = 0
   let outOfTime = false
 
-  const search = (
-    position: Board,
-    turn: Side,
-    remaining: number,
-    alpha: number,
-    beta: number,
-  ): number => {
+  const search = (position: Board, turn: Side, remaining: number, alpha: number, beta: number): number => {
     nodes += 1
     if (performance.now() - started > budgetMs) {
       outOfTime = true

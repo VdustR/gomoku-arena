@@ -42,9 +42,7 @@ const seat = z.strictObject({
  * open on purpose — the bag is the point. `source` is the part that must be
  * there, because a number without its provenance is worth nothing.
  */
-const metrics = z
-  .looseObject({ source: z.enum(['measured', 'reported']) })
-  .nullable()
+const metrics = z.looseObject({ source: z.enum(['measured', 'reported']) }).nullable()
 
 const refusal = z.strictObject({
   point: z.string(),
@@ -191,7 +189,10 @@ export function readRecord(raw: unknown): ReadResult {
   if (!parsed.success) {
     const first = parsed.error.issues[0]
     const where = first?.path?.length ? ` at ${first.path.join('.')}` : ''
-    return { ok: false, reason: `does not match format ${FORMAT_VERSION}${where}: ${first?.message ?? 'invalid'}` }
+    return {
+      ok: false,
+      reason: `does not match format ${FORMAT_VERSION}${where}: ${first?.message ?? 'invalid'}`,
+    }
   }
   return { ok: true, record: parsed.data }
 }

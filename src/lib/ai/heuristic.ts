@@ -245,11 +245,15 @@ export function describePosition(
   }
   return {
     game: 'gomoku',
-    rule_set: ruleSet === 'renju' ? 'renju (black may not play an overline, double four, or double three)' : 'free style (five or more in a row wins)',
+    rule_set:
+      ruleSet === 'renju'
+        ? 'renju (black may not play an overline, double four, or double three)'
+        : 'free style (five or more in a row wins)',
     board_size: `${size}x${size}`,
     you_play: color === BLACK ? 'black' : 'white',
     your_stones: mine.length ? mine.join(' ') : '(none yet)',
     opponent_stones: theirs.length ? theirs.join(' ') : '(none yet)',
-    objective: 'Get five of your stones in an unbroken row, column, or diagonal before the opponent does. Block the opponent when their threat is more urgent than yours.',
+    objective:
+      'Get five of your stones in an unbroken row, column, or diagonal before the opponent does. Block the opponent when their threat is more urgent than yours.',
   }
 }

@@ -88,9 +88,12 @@ as a store subscription on a local variable named `state` — ninety-nine errors
 that were all the same misreading. Avoid naming anything `state` in a
 component for the same reason.
 
-**The formatter is not in `pnpm check`.** `vp fmt` wants semicolons and this
-project has none anywhere. Adopting oxfmt is a separate decision about the
-house style, not something a type conversion should have made.
+**The formatter enforces the house style rather than replacing it.** The `fmt`
+block in `vite.config.ts` says what that style is — no semicolons, single
+quotes, and a print width of 110, which was chosen by measuring how much each
+candidate moved rather than by taste. `.prettierignore` keeps it off the
+Markdown: it does not rewrap paragraphs, but it pads every table to align its
+columns, and the prose here is wrapped by hand for reading.
 
 No `any`. A hard spot is where the modelling is wrong, and the modelling is
 what this is for. The exception is a library whose own declarations predate
