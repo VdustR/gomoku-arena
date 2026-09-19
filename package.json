@@ -33,7 +33,7 @@
     "dev": "vp dev",
     "build": "vp build",
     "start": "node --env-file-if-exists=.env server/index.js",
-    "test": "node test/rules.test.mjs && node test/config.test.mjs && node test/engines.test.mjs && node test/providers.test.mjs && node test/review.test.mjs && node test/relay.test.mjs && node test/mcp.test.mjs"
+    "test": "node test/rules.test.mjs && node test/config.test.mjs && node test/engines.test.mjs && node test/providers.test.mjs && node test/review.test.mjs && node test/persistence.test.mjs && node test/relay.test.mjs && node test/mcp.test.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^6.2.1",

@@ -136,6 +136,7 @@ The rest stay on the server and never reach the page:
 | `GOMOKU_UPSTREAM_TIMEOUT_MS` | `60000` | How long the relay waits upstream |
 | `GOMOKU_ALLOW_INSECURE_HTTP` | `false` | Permit plain http to a non-loopback endpoint |
 | `GOMOKU_MAX_MATCHES` | `50` | Matches kept before the oldest is evicted |
+| `GOMOKU_STATE_DIR` | `.matches/` | Where match records are written |
 
 ## Why a server is required
 

@@ -12,6 +12,9 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
   SIZE,
   BLACK,
@@ -45,11 +48,133 @@ const METRIC_SOURCES = new Set(['measured', 'reported'])
 export const SEATS = { black: BLACK, white: WHITE }
 export const seatName = (color) => (color === BLACK ? 'black' : 'white')
 
+/*
+ * Matches survive a restart.
+ *
+ * They used to live only in memory, so reloading the dev server — which a
+ * source edit does on its own — ended every game in progress. Two agents
+ * mid-match have no way to recover from that, and no reason to expect it.
+ *
+ * One small JSON file per match, written on every change. At this size that
+ * is cheaper than anything with a schema, and a corrupt or hand-edited file
+ * costs one match rather than the whole store.
+ */
+const STORE = process.env.GOMOKU_STATE_DIR
+  ? resolve(process.env.GOMOKU_STATE_DIR)
+  : resolve(fileURLToPath(new URL('../.matches', import.meta.url)))
+
 const matches = new Map()
 /** Resolvers waiting for a seat's turn, keyed by `${matchId}:${color}`. */
 const waiters = new Map()
 /** Subscribers to any change in a match, for the browser's event stream. */
 const watchers = new Map()
+
+const fileFor = (id) => join(STORE, `${id}.json`)
+
+/*
+ * The move list is the record; everything else is a view of it.
+ *
+ * The board, whose turn it is, who won and the frames a review steps through
+ * are all reachable by replaying the moves, so storing them too would be two
+ * versions of one fact that can disagree. What cannot be derived — the rules
+ * in force, who held each seat, what each player said and what the board
+ * refused — is what gets written.
+ *
+ * This also makes a saved file portable: drop one into the state directory
+ * and the match is playable and reviewable again.
+ */
+const toStored = (match) => ({
+  id: match.id,
+  ruleSet: match.ruleSet,
+  seats: match.seats,
+  history: match.history,
+  rejected: match.rejected,
+  createdAt: match.createdAt,
+  updatedAt: match.updatedAt,
+  version: match.version,
+})
+
+/** Rebuild the derived state by replaying the moves through the same rules. */
+export function replay({ id, ruleSet, seats, history, rejected, createdAt, updatedAt, version }) {
+  const match = {
+    id,
+    ruleSet,
+    seats,
+    history: [],
+    board: createBoard(),
+    turn: BLACK,
+    status: 'playing',
+    winner: null,
+    winningStones: [],
+    rejected: rejected ?? { [BLACK]: [], [WHITE]: [] },
+    // A turn that was in flight when the server stopped restarts its clock.
+    turnStartedAt: Date.now(),
+    createdAt,
+    updatedAt: updatedAt ?? createdAt,
+    version: version ?? 0,
+  }
+
+  for (const move of history) {
+    const outcome = resolveMove(match.board, move.x, move.y, move.color, ruleSet)
+    match.board[idx(move.x, move.y)] = move.color
+    match.history.push(move)
+    if (outcome.status === 'win') {
+      match.status = 'win'
+      match.winner = move.color
+      match.winningStones = winningLine(match.board, move.x, move.y, move.color)
+    } else if (outcome.status === 'draw') {
+      match.status = 'draw'
+    } else {
+      match.turn = move.color === BLACK ? WHITE : BLACK
+    }
+  }
+  return match
+}
+
+const fromStored = (raw) => replay(raw)
+
+function persist(match) {
+  try {
+    mkdirSync(STORE, { recursive: true })
+    writeFileSync(fileFor(match.id), JSON.stringify(toStored(match)))
+  } catch {
+    // A match that cannot be written still plays; it just will not survive a
+    // restart. Losing the game to a disk error would be the worse trade.
+  }
+}
+
+function forget(id) {
+  matches.delete(id)
+  watchers.delete(id)
+  try {
+    rmSync(fileFor(id), { force: true })
+  } catch {
+    /* already gone */
+  }
+}
+
+/** Read whatever the last run left behind. Called once, at startup. */
+function restore() {
+  let files = []
+  try {
+    files = readdirSync(STORE).filter((name) => name.endsWith('.json'))
+  } catch {
+    return
+  }
+  for (const name of files) {
+    try {
+      const match = fromStored(JSON.parse(readFileSync(join(STORE, name), 'utf8')))
+      if (match?.id) matches.set(match.id, match)
+    } catch {
+      // One unreadable file is one lost match, not a broken store.
+      try {
+        rmSync(join(STORE, name), { force: true })
+      } catch {
+        /* nothing to do */
+      }
+    }
+  }
+}
 
 export class MatchError extends Error {
   constructor(code, message, detail = {}) {
@@ -102,6 +227,7 @@ function stonesOf(board, color) {
 function notify(match) {
   match.updatedAt = new Date().toISOString()
   match.version += 1
+  persist(match)
 
   for (const color of [BLACK, WHITE]) {
     const key = `${match.id}:${color}`
@@ -130,8 +256,7 @@ function evictOldest() {
       if (!oldest || match.updatedAt < oldest.updatedAt) oldest = match
     }
     if (!oldest) break
-    matches.delete(oldest.id)
-    watchers.delete(oldest.id)
+    forget(oldest.id)
   }
 }
 
@@ -172,6 +297,7 @@ export function createMatch({ ruleSet = 'free', black, white } = {}) {
     updatedAt: new Date().toISOString(),
   }
   matches.set(match.id, match)
+  persist(match)
   evictOldest()
   return match
 }
@@ -346,16 +472,21 @@ export function reviewMatch(matchId) {
       rejected: move.rejected ?? [],
       at: move.at,
     })),
-    /** The board after each move, so a reader can step through positions. */
-    positions: match.history.reduce(
-      (frames, move) => {
-        const next = frames.at(-1).slice()
-        next[idx(move.x, move.y)] = move.color
-        frames.push(next)
-        return frames
-      },
-      [Array.from(createBoard())],
-    ).map((frame) => Array.from(frame)),
+    /**
+     * One frame per move, replayed from the same move list the store holds.
+     * Nothing here is remembered; it is all the history seen step by step.
+     */
+    positions: match.history
+      .reduce(
+        (frames, move) => {
+          const next = frames.at(-1).slice()
+          next[idx(move.x, move.y)] = move.color
+          frames.push(next)
+          return frames
+        },
+        [Array.from(createBoard())],
+      )
+      .map((frame) => Array.from(frame)),
     note: 'thinkingMs is measured by the server and comparable across players. Everything under metrics is whatever that player could produce; check its source before comparing.',
   }
 }
@@ -384,6 +515,7 @@ export function play(matchId, seat, point, { by = null, latencyMs = null, note =
   } catch (error) {
     // A point that does not parse is still something the player tried.
     match.rejected[color].push({ point: String(point), reason: 'bad-point', at: new Date().toISOString() })
+    persist(match)
     throw error
   }
 
@@ -403,6 +535,9 @@ export function play(matchId, seat, point, { by = null, latencyMs = null, note =
       reason: legality.reason,
       at: new Date().toISOString(),
     })
+    // A refusal changes no stone, so notify does not run: save it explicitly
+    // or the attempt disappears with the next restart.
+    persist(match)
     throw new MatchError('illegal_move', message, { reason: legality.reason, point: coordLabel(x, y) })
   }
 
@@ -566,3 +701,6 @@ export function watchMatch(matchId, send) {
 }
 
 export { SIZE, BLACK, WHITE, EMPTY }
+
+// Pick up anything the previous run left behind.
+restore()

@@ -12,6 +12,12 @@
  * MCP servers cannot send requests to their clients, so there is no way to
  * tell an agent that its turn has arrived. `await_turn` holds one call open
  * until it has, which beats a polling loop on both latency and tokens.
+ *
+ * The cost that matters to an agent is not this server's latency, which is a
+ * couple of milliseconds, but how many turns of its own it spends per move:
+ * every tool call is a full model turn that re-reads the conversation. So
+ * `play` can wait for the opponent and return the position it is handing
+ * back, turning read-decide-play-wait into a single call.
  */
 
 import { randomUUID } from 'node:crypto'
@@ -86,9 +92,10 @@ export function buildMcpServer() {
       instructions: [
         'A gomoku board two players share. You hold a seat and play stones on it.',
         '',
-        'Typical loop: new_match (or list_matches, then get_state) → await_turn → play → repeat.',
+        'Fewest turns: get_state once, then call play with wait_ms set. Each call places your',
+        'stone, waits for the opponent, and returns the position you now face — one call per move.',
+        'Without wait_ms the loop is await_turn → play → repeat, which costs you three times as many turns.',
         'Say why you chose each point in play\u2019s note: it is kept and shown in the review.',
-        'await_turn blocks until the seat you name is on move, so you do not need to poll.',
         '',
         'You may name any point, written as a column letter and a row number, e.g. H8.',
         'Columns run A-H then J-P; there is no column I. Row 15 is the top.',
@@ -195,6 +202,15 @@ export function buildMcpServer() {
           .max(400)
           .optional()
           .describe('Why you chose this point. Kept in the move log and shown in the review, so write what you were actually weighing.'),
+        wait_ms: z
+          .number()
+          .int()
+          .min(0)
+          .max(600_000)
+          .optional()
+          .describe(
+            'After the stone lands, hold the call open until it is your move again, and return that position. One call then covers a whole move cycle, which costs you far fewer turns than play + await_turn + get_state. 0 or omitted returns immediately.',
+          ),
         metrics: z
           .object({
             input_tokens: z.number().optional(),
@@ -210,13 +226,17 @@ export function buildMcpServer() {
       },
       annotations: { idempotentHint: false },
     },
-    guard(async ({ match_id, seat, point, note, metrics }) => {
+    guard(async ({ match_id, seat, point, note, metrics, wait_ms }) => {
       // `by` falls back to the seat's label, which new_match set.
-      const match = play(match_id, seat, point, {
+      play(match_id, seat, point, {
         note: note ?? null,
         metrics: metrics ? { source: 'reported', ...metrics } : null,
       })
-      return ok(publicMatch(match, { seat }))
+
+      if (!wait_ms) return ok(publicMatch(getMatch(match_id), { seat }))
+
+      const { timedOut } = await awaitTurn(match_id, seat, wait_ms)
+      return ok({ waitedForOpponent: true, timedOut, ...publicMatch(getMatch(match_id), { seat }) })
     }),
   )
 

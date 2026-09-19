@@ -160,14 +160,50 @@ const withMetrics = await call(alice, 'review', { match_id: matchId })
 check('self-reported numbers are kept, marked reported', withMetrics.payload.moves.at(-1).metrics.source, 'reported')
 check('with the value the agent gave', withMetrics.payload.moves.at(-1).metrics.input_tokens, 42)
 
+/*
+ * One call per move. The expensive thing for an agent is its own turns, not
+ * this server's latency, so play can place the stone, wait for the opponent
+ * and hand back the position that resulted.
+ */
+const cycleMatch = (await call(alice, 'new_match', {
+  rule_set: 'free',
+  black: { kind: 'agent', label: 'black' },
+  white: { kind: 'agent', label: 'white' },
+})).payload.id
+
+const cycle = call(alice, 'play', {
+  match_id: cycleMatch,
+  seat: 'black',
+  point: 'H8',
+  wait_ms: 10_000,
+})
+// The opponent answers while that call is still open.
+await new Promise((r) => setTimeout(r, 150))
+await call(bob, 'play', { match_id: cycleMatch, seat: 'white', point: 'J9' })
+const cycled = await cycle
+
+check('one call covers place, wait and read back', cycled.payload.waitedForOpponent, true)
+check('it did not simply time out', cycled.payload.timedOut, false)
+check('the opponent\u2019s reply is already in the board it returns', cycled.payload.board.white, ['J9'])
+check('and it is the caller\u2019s move again', cycled.payload.yourTurn, true)
+
+const noWait = await call(alice, 'play', { match_id: cycleMatch, seat: 'black', point: 'K10' })
+check('without wait_ms it returns immediately', noWait.payload.waitedForOpponent, undefined)
+check('with the turn handed over', noWait.payload.turn, 'white')
+
 // A wait for a turn that is not coming reports a timeout rather than hanging.
 // After black's L12 the move is white's, so a wait for black must time out.
 const timedOut = await call(alice, 'await_turn', { match_id: renjuId, seat: 'black', timeout_ms: 1000 })
 check('a wait that cannot be satisfied times out cleanly', timedOut.payload.timedOut, true)
 
-// Matches are independent.
-const both = await call(alice, 'list_matches', {})
-check('both matches are listed', both.payload.matches.length, 2)
+// Matches are independent: every one opened in this run is listed.
+const listed = await call(alice, 'list_matches', {})
+check('every match opened here is listed', listed.payload.matches.length, 3)
+check(
+  'and each carries its own id',
+  new Set(listed.payload.matches.map((m) => m.id)).size,
+  3,
+)
 
 await alice.close()
 await bob.close()

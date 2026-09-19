@@ -8,8 +8,10 @@
 
 import { createServer } from 'node:http'
 import { spawn } from 'node:child_process'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { dirname, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -25,19 +27,31 @@ export function freePort() {
   })
 }
 
-/** Start the app server on its own port and wait until it answers. */
+/**
+ * Start the app server on its own port, with its own state directory, and
+ * wait until it answers.
+ *
+ * Matches now survive a restart, which means a server sharing the default
+ * store would also inherit every match an earlier run left behind. A suite
+ * that counts matches would then be counting last week's.
+ */
 export async function startServer(env = {}) {
   const port = await freePort()
+  const stateDir = env.GOMOKU_STATE_DIR ?? mkdtempSync(join(tmpdir(), 'gomoku-test-'))
   const child = spawn(process.execPath, ['server/index.js'], {
     cwd: ROOT,
-    env: { ...process.env, PORT: String(port), ...env },
+    env: { ...process.env, PORT: String(port), GOMOKU_STATE_DIR: stateDir, ...env },
     stdio: 'ignore',
   })
+  // A directory this helper created is this helper's to remove.
+  if (!env.GOMOKU_STATE_DIR) {
+    child.once('exit', () => rmSync(stateDir, { recursive: true, force: true }))
+  }
   const base = `http://127.0.0.1:${port}`
   for (let attempt = 0; attempt < 80; attempt += 1) {
     try {
       await fetch(`${base}/api/matches`)
-      return { child, port, base, stop: () => stop(child) }
+      return { child, port, base, stateDir, stop: () => stop(child) }
     } catch {
       await new Promise((r) => setTimeout(r, 100))
     }
