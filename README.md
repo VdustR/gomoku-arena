@@ -69,6 +69,10 @@ endpoint have far less in common than minimax and MCTS do.
 | Minimax (alpha-beta) | Depth-limited search with pruning and move ordering by the same scoring. Depth and width are configurable. |
 | MCTS (UCT) | Guided random playouts under a time budget. Forced wins and mandatory blocks are decided before sampling, because a few hundred playouts do not settle a tactic reliably. |
 
+Each is written here from the published description of its method. **No code is
+copied from another implementation** — see [References](#references) for where
+the methods come from.
+
 **Models** — decided by a model, each with its own prerequisite.
 
 | Provider | Needs a key | Where it runs |
@@ -277,6 +281,37 @@ server/routes.js        One pipeline, shared by the dev server and `pnpm start`
 server/index.js         `pnpm start`: serves dist/ and the routes
 test/                   Six suites; see Tests above
 ```
+
+## References
+
+The search engines implement published algorithms. The papers are the source of
+the method, not of the code: nothing here is copied from another
+implementation, and `src/lib/ai/engines.js` says so at the point where each one
+is defined.
+
+- **Alpha-beta pruning** — D. E. Knuth and R. W. Moore, [An analysis of
+  alpha-beta pruning](https://www.sciencedirect.com/science/article/abs/pii/0004370275900193),
+  *Artificial Intelligence* 6(4), 1975, 293–326. The proof that good move
+  ordering is what makes the pruning pay, which is why this engine orders by
+  the same scoring the greedy one uses.
+- **Monte Carlo tree search** — R. Coulom, [Efficient Selectivity and Backup
+  Operators in Monte-Carlo Tree
+  Search](https://link.springer.com/chapter/10.1007/978-3-540-75538-8_7),
+  *Computers and Games* 2006, 72–83.
+- **UCT**, the selection rule used here — L. Kocsis and C. Szepesvári, [Bandit
+  Based Monte-Carlo Planning](https://link.springer.com/chapter/10.1007/11871842_29),
+  *ECML* 2006, LNCS 4212, 282–293.
+- **Greedy threat scoring** has no canonical paper. It is the standard shape
+  heuristic every gomoku program carries in some form.
+
+Context for all of them: free-style gomoku on 15×15 is a first-player win,
+proved by L. V. Allis, [Searching for Solutions in Games and Artificial
+Intelligence](https://cris.maastrichtuniversity.nl/en/publications/searching-for-solutions-in-games-and-artificial-intelligence),
+PhD thesis, University of Limburg, 1994. That result is why renju restricts
+black, and why an engine seated on white is not starting level.
+
+Renju's restrictions follow the tournament rules of the Renju International
+Federation.
 
 ## License
 

@@ -9,6 +9,36 @@
  *
  * Each engine exports the same shape as a provider adapter: it is handed the
  * position and returns a chosen point plus what it can say about the choice.
+ *
+ * ## Where these come from
+ *
+ * No code here is copied from anywhere. Each engine is written from the
+ * published description of its method, so the references below are the source
+ * of the algorithm, not of the implementation — worth stating plainly, because
+ * claiming an adaptation that did not happen would be as wrong as omitting a
+ * real one.
+ *
+ * - Alpha-beta pruning: D. E. Knuth and R. W. Moore, "An analysis of
+ *   alpha-beta pruning", Artificial Intelligence 6(4), 1975, 293-326.
+ *   https://www.sciencedirect.com/science/article/abs/pii/0004370275900193
+ *
+ * - Monte Carlo tree search: R. Coulom, "Efficient Selectivity and Backup
+ *   Operators in Monte-Carlo Tree Search", Computers and Games 2006, 72-83.
+ *   https://link.springer.com/chapter/10.1007/978-3-540-75538-8_7
+ *
+ * - UCT, the selection rule used here: L. Kocsis and C. Szepesvari, "Bandit
+ *   Based Monte-Carlo Planning", ECML 2006, LNCS 4212, 282-293.
+ *   https://link.springer.com/chapter/10.1007/11871842_29
+ *
+ * - Greedy threat scoring has no canonical paper. It is the standard shape
+ *   heuristic every gomoku program carries in some form, written here against
+ *   this project's own rules module.
+ *
+ * Context for all three: free-style gomoku on 15x15 is a first-player win,
+ * proved by L. V. Allis, "Searching for Solutions in Games and Artificial
+ * Intelligence", PhD thesis, University of Limburg, 1994. That is why renju
+ * restricts black, and why an engine playing white here is not starting level.
+ * https://cris.maastrichtuniversity.nl/en/publications/searching-for-solutions-in-games-and-artificial-intelligence
  */
 
 import { BLACK, WHITE, EMPTY, SIZE, idx, moveLegality, coordLabel } from '../rules.js'
@@ -96,7 +126,8 @@ export function greedyMove(board, color, ruleSet) {
  * Depth-limited minimax over a narrowed move list, with alpha-beta pruning
  * and move ordering by the same scoring the greedy engine uses. Good move
  * ordering is what makes the pruning pay: the best move is usually examined
- * first, so most of the tree is never opened.
+ * first, so most of the tree is never opened — Knuth and Moore (1975) is where
+ * that result is proved, and where the bound on how much it saves comes from.
  */
 export function minimaxMove(board, color, ruleSet, { depth = 4, width = 10, budgetMs = 2500 } = {}) {
   const started = performance.now()
@@ -196,6 +227,10 @@ const UCT_C = Math.SQRT2
 
 /**
  * UCT with heuristic-guided playouts, run against a time budget.
+ *
+ * The tree policy is UCT as Kocsis and Szepesvari (2006) define it: pick the
+ * child maximising win rate plus C * sqrt(ln(N) / n). The surrounding
+ * search-then-average structure is Coulom's (2006) MCTS.
  *
  * Uniformly random playouts are close to worthless on a 15x15 board — a
  * random game almost never reaches five in a row — so rollouts pick from the
@@ -300,6 +335,7 @@ export const ENGINES = {
     name: 'Greedy scoring',
     note: 'one ply',
     tagline: 'One ply of threat scoring. Instant, and blind to anything deeper.',
+    source: { label: 'Standard shape heuristic, no canonical paper', url: null },
     run: greedyMove,
   },
   minimax: {
@@ -307,6 +343,10 @@ export const ENGINES = {
     name: 'Minimax (alpha-beta)',
     note: 'searches ahead',
     tagline: 'Depth-limited search with pruning and move ordering.',
+    source: {
+      label: 'Knuth & Moore 1975, An analysis of alpha-beta pruning',
+      url: 'https://www.sciencedirect.com/science/article/abs/pii/0004370275900193',
+    },
     run: minimaxMove,
   },
   mcts: {
@@ -314,6 +354,10 @@ export const ENGINES = {
     name: 'MCTS (UCT)',
     note: 'samples playouts',
     tagline: 'Guided random playouts, budgeted by time rather than depth.',
+    source: {
+      label: 'Kocsis & Szepesvári 2006, Bandit Based Monte-Carlo Planning',
+      url: 'https://link.springer.com/chapter/10.1007/11871842_29',
+    },
     run: mctsMove,
   },
 }

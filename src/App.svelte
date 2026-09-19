@@ -324,6 +324,13 @@
           <p>{provider.tagline}</p>
           {#if provider.isEngine}
             <p class="status">Code only. No key, no network, no cost.</p>
+            <p class="status source">
+              {#if provider.source?.url}
+                Method: <a href={provider.source.url} target="_blank" rel="noreferrer noopener">{provider.source.label}</a>
+              {:else}
+                {provider.source?.label}
+              {/if}
+            </p>
           {:else if provider.id === BROWSER_ID}
             <p class="status">{browserModel?.detail ?? 'Checking this browser…'}</p>
           {:else if provider.id === JEV_ID}
@@ -339,6 +346,14 @@
         </article>
       {/each}
     </div>
+    <p class="method">
+      The search engines are written here from the published description of each method; no code is copied
+      from another implementation, which is why the links above are to papers rather than to repositories.
+      Free-style gomoku on 15×15 is a first-player win, proved by
+      <a href="https://cris.maastrichtuniversity.nl/en/publications/searching-for-solutions-in-games-and-artificial-intelligence" target="_blank" rel="noreferrer noopener">Allis (1994)</a>,
+      which is why renju restricts black and why white is not starting level.
+    </p>
+
     <p class="method">
       No engine is asked to invent a coordinate. The page scores the position, hands over a shortlist of legal
       moves with a plain description of what each one does, and the model picks one. An illegal move cannot reach
@@ -661,6 +676,15 @@
 
   .providers .status {
     color: var(--text-lo);
+  }
+
+  .providers .source {
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
+
+  .providers .source a {
+    color: var(--teal-hi);
   }
 
   .providers a {
