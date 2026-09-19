@@ -10,6 +10,7 @@
 import { BLACK, WHITE, SIZE, createBoard, idx, coordLabel, FORBIDDEN_COPY } from './rules.js'
 import { chooseMove, PROVIDERS, DEFAULT_ENGINE_ID, colorName } from './ai/providers.js'
 import { keyFor, configFor } from './settings.svelte.js'
+import { serverCovers, serverProblem } from './relay.svelte.js'
 import { config } from './config.js'
 
 export const HUMAN = 'human'
@@ -356,10 +357,19 @@ export async function playProvider() {
   const provider = seat.provider ?? DEFAULT_ENGINE_ID
   const key = keyFor(provider)
   const meta = PROVIDERS[provider]
-  if (meta?.needsKey && !key) {
+  /*
+   * A key can come from here or from the server's environment, and the server
+   * one is invisible to this page by design. Refusing on the browser's key
+   * alone is what made an environment-supplied key unusable from the page:
+   * the relay that would have supplied it was never called.
+   */
+  if (meta?.needsKey && !key && !serverCovers(provider)) {
+    const problem = serverProblem(provider)
     game.error = {
       title: `${meta.name} needs a key`,
-      detail: `Add one in Settings to let it play ${colorName(color).toLowerCase()}. Nothing is stored outside this browser.`,
+      detail: problem
+        ? `${problem} Until then, add a key in Settings to let it play ${colorName(color).toLowerCase()}.`
+        : `Add one in Settings to let it play ${colorName(color).toLowerCase()}, or set one on the server. A key typed here is kept in this browser.`,
     }
     return
   }
@@ -394,6 +404,16 @@ export async function playProvider() {
   } catch (error) {
     if (error?.name === 'AbortError') return
     game.error = { title: `${meta?.name ?? provider} could not answer`, detail: String(error?.message ?? error) }
+    /*
+     * Hand the decision back rather than asking again.
+     *
+     * The loop that drives engine seats re-fires as soon as this stops
+     * thinking, so a provider that fails is asked again every moveDelayMs —
+     * a retry loop against an endpoint someone is paying for, and one that
+     * buries the reason under the next identical failure. Disarming puts
+     * Resume back in front of the person who can fix it.
+     */
+    game.armed = false
   } finally {
     game.thinking = false
     game.thinkingFor = null

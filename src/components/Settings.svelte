@@ -1,6 +1,7 @@
 <script>
   import { settings, persist, forgetEverything, keyFingerprint } from '../lib/settings.svelte.js'
   import { PROVIDERS, JEV_ID, OPENAI_ID } from '../lib/ai/providers.js'
+  import { serverCovers, serverProblem } from '../lib/relay.svelte.js'
 
   let { open = $bindable(false), browserModel } = $props()
 
@@ -48,8 +49,9 @@
     </header>
 
     <p class="lede">
-      Nothing here ships with a key. What you enter is kept in this browser’s localStorage and sent only with the
-      move it pays for. Remote providers pass through the relay on the server you started — it forwards one
+      Nothing here ships with a key. A key can come from two places: this browser, or the environment of the
+      server you started. What you enter here wins, is kept in this browser’s localStorage, and is sent only
+      with the move it pays for. Remote providers pass through the relay on that server — it forwards one
       request and keeps no copy. Everything stays on your machine and the provider’s.
     </p>
 
@@ -58,10 +60,20 @@
         <h3>{PROVIDERS[JEV_ID].name}</h3>
         {#if settings.jevKey}
           <span class="fingerprint tnum">{keyFingerprint(settings.jevKey)}</span>
+        {:else if serverCovers(JEV_ID)}
+          <span class="from-server">key on the server</span>
         {:else}
           <span class="absent">no key</span>
         {/if}
       </div>
+      {#if serverProblem(JEV_ID)}
+        <p class="server-problem">{serverProblem(JEV_ID)}</p>
+      {:else if serverCovers(JEV_ID)}
+        <p class="hint">
+          The server holds a key for this provider and pins where it is spent, so you can play without entering
+          one. A key typed below is used instead, with the base URL and model set here.
+        </p>
+      {/if}
       <label>
         <span>API key</span>
         <div class="field">
@@ -104,10 +116,20 @@
         <h3>{PROVIDERS[OPENAI_ID].name}</h3>
         {#if settings.openaiKey}
           <span class="fingerprint tnum">{keyFingerprint(settings.openaiKey)}</span>
+        {:else if serverCovers(OPENAI_ID)}
+          <span class="from-server">key on the server</span>
         {:else}
           <span class="absent">no key</span>
         {/if}
       </div>
+      {#if serverProblem(OPENAI_ID)}
+        <p class="server-problem">{serverProblem(OPENAI_ID)}</p>
+      {:else if serverCovers(OPENAI_ID)}
+        <p class="hint">
+          The server holds a key for this provider and pins where it is spent, so you can play without entering
+          one. A key typed below is used instead, with the base URL and model set here.
+        </p>
+      {/if}
       <label>
         <span>API key</span>
         <div class="field">
@@ -238,6 +260,24 @@
   .absent {
     font-size: 0.75rem;
     color: var(--text-lo);
+  }
+
+  /* A key the server holds is usable but not yours to see, so it reads as a
+     source rather than as a fingerprint of something in this browser. */
+  .from-server {
+    font-size: 0.75rem;
+    color: var(--text-lo);
+    font-style: italic;
+  }
+
+  .server-problem {
+    margin: 0;
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    color: #eddcc2;
+    background: color-mix(in srgb, var(--amber) 12%, var(--ink-800));
+    border-radius: var(--radius-sm);
+    padding: 0.55rem 0.75rem;
   }
 
   .state {

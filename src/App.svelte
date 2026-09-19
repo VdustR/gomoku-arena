@@ -41,7 +41,8 @@
     DEFAULT_ENGINE_ID,
     detectBrowserModel,
   } from './lib/ai/providers.js'
-  import { settings } from './lib/settings.svelte.js'
+  import { settings, keyFor } from './lib/settings.svelte.js'
+  import { loadRelayKeys, serverCovers } from './lib/relay.svelte.js'
   import { config } from './lib/config.js'
 
   let settingsOpen = $state(false)
@@ -75,6 +76,7 @@
     const fromUrl = new URLSearchParams(location.hash.slice(1)).get('match')
     const opening = fromUrl ? joinMatch(fromUrl).catch(() => startMatch()) : startMatch()
     opening
+      .then(() => loadRelayKeys())
       .then(() => detectBrowserModel())
       .then((result) => {
         browserModel = result
@@ -90,8 +92,24 @@
       })
   })
 
+  /**
+   * Where a key for this provider would come from.
+   *
+   * Two sources, and the browser's wins: a key typed here is a deliberate
+   * override of whatever the server holds. Saying which one is in play is the
+   * only way a person can tell "this will work" from "this will ask me for a
+   * key" before choosing a seat.
+   */
+  function keyNoteFor(id) {
+    if (keyFor(id)) return 'key in this browser'
+    if (serverCovers(id)) return 'key on the server'
+    return 'needs a key'
+  }
+
   const availableProviders = $derived(
-    Object.values(PROVIDERS).filter((p) => p.id !== BROWSER_ID || browserModel?.supported),
+    Object.values(PROVIDERS)
+      .filter((p) => p.id !== BROWSER_ID || browserModel?.supported)
+      .map((p) => (p.needsKey ? { ...p, note: keyNoteFor(p.id) } : p)),
   )
 
   /** The seat picker, grouped by what the choice actually costs the player. */

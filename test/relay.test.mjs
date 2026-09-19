@@ -80,6 +80,22 @@ check('a server key goes to the endpoint the server pinned', viaServerKey.json.b
 check('the server key is the one forwarded', viaServerKey.json.body?.auth, `Bearer ${SERVER_KEY}`)
 check('the caller-named endpoint is never contacted', hits.caller, 0)
 
+/*
+ * The page cannot see the environment, which is the point of keeping the key
+ * there — so the server has to say whether it has one, or a configured key is
+ * unusable from the browser. It says that a key exists and nothing else about
+ * it: not the value, not the length, not the prefix.
+ */
+const capable = await fetch(`${RELAY_BASE}/api/relay`).then((r) => r.json())
+check('the server says which providers it can cover', capable.providers.jev.canCover, true)
+check('and which it cannot', capable.providers.openai.canCover, false)
+check('a configured provider reports no problem', capable.providers.jev.problem, null)
+check(
+  'nothing of the key itself is published',
+  JSON.stringify(capable).includes(SERVER_KEY),
+  false,
+)
+
 const viaCallerKey = await call('/api/jev', { baseUrl: CALLER_BASE, request: {} }, 'caller-key')
 check('a caller key may name its own endpoint', viaCallerKey.json.body?.reachedBy, 'caller')
 check('the server key does not leak to it', viaCallerKey.json.body?.auth, 'Bearer caller-key')
@@ -117,6 +133,26 @@ relay = await startRelay({ GOMOKU_JEV_KEY: SERVER_KEY })
 const unpinned = await call('/api/jev', { baseUrl: CALLER_BASE, request: {} })
 check('a server key without a pinned base URL is refused', unpinned.status, 500)
 check('the caller-named endpoint is still never contacted', hits.caller, 1) // only the caller-key call above
+
+/*
+ * A half-configured server explains itself up front. Otherwise the page, which
+ * now reports what the relay says, would hand someone a 500 at their first
+ * move for a variable they never knew about.
+ */
+const halfway = await fetch(`${RELAY_BASE}/api/relay`).then((r) => r.json())
+check('a half-configured provider cannot be covered', halfway.providers.jev.canCover, false)
+check(
+  'and the missing variable is named',
+  halfway.providers.jev.problem?.includes('GOMOKU_JEV_BASE_URL'),
+  true,
+)
+await stop(relay)
+
+// With nothing configured there is no key and nothing to explain.
+relay = await startRelay({})
+const bare = await fetch(`${RELAY_BASE}/api/relay`).then((r) => r.json())
+check('an unconfigured server covers nothing', bare.providers.jev.canCover, false)
+check('and reports no problem, because nothing was attempted', bare.providers.jev.problem, null)
 await stop(relay)
 
 for (const server of sinks) server.close()
