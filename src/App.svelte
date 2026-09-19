@@ -14,6 +14,8 @@
     setSeat,
     setRuleSet,
     undoLastPair,
+    takeBackCount,
+    hasAgentSeat,
     stopThinking,
     forbiddenCopyFor,
     arm,
@@ -44,6 +46,27 @@
   let settingsOpen = $state(false)
   let browserModel = $state(null)
   let rejection = $state(null)
+  /**
+   * Take back reaches a player who is not on this screen.
+   *
+   * A seat held over MCP is deciding against the position this control
+   * removes, and finds out by being refused. When one is seated the button
+   * says what it is about to do to them and waits for a second press; with
+   * only local players there is nobody to warn, so it acts on the first.
+   */
+  let undoArmedAt = $state(null)
+  // Derived rather than held, so a move of any kind retires the warning on
+  // its own: it describes a board that is no longer in front of anyone.
+  const undoPending = $derived(undoArmedAt !== null && undoArmedAt === game.history.length)
+
+  function onTakeBack() {
+    if (!hasAgentSeat() || undoPending) {
+      undoArmedAt = null
+      undoLastPair()
+      return
+    }
+    undoArmedAt = game.history.length
+  }
 
   // Open a match on the server, or rejoin one named in the URL so a tab can
   // watch a game an agent started: #match=<id>
@@ -273,8 +296,8 @@
       />
 
       <div class="actions">
-        <button class="secondary" onclick={undoLastPair} disabled={game.history.length === 0 || game.thinking}>
-          Take back
+        <button class="secondary" onclick={onTakeBack} disabled={game.history.length === 0 || game.thinking}>
+          {undoPending ? `Remove ${takeBackCount() === 1 ? 'the last move' : `the last ${takeBackCount()} moves`}` : 'Take back'}
         </button>
         {#if game.thinking}
           <button class="primary" onclick={stopThinking}>Stop thinking</button>
@@ -284,6 +307,15 @@
           <button class="primary" onclick={loadReview} disabled={game.history.length === 0}>Review</button>
         {/if}
       </div>
+
+      {#if undoPending}
+        <p class="alert rewind-warning">
+          <strong>A seat here is played from outside this page.</strong>
+          Taking back changes the board that player is deciding against. Its next move will be
+          refused, and it will be told the board was rewound. Press again to go ahead.
+          <button onclick={() => (undoArmedAt = null)}>Keep the board</button>
+        </p>
+      {/if}
 
 
       {#if game.review}
@@ -522,6 +554,22 @@
   }
 
   .error button {
+    background: none;
+    border: none;
+    color: var(--amber-hi);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+    padding: 0;
+    font-size: inherit;
+  }
+
+  .rewind-warning {
+    background: color-mix(in srgb, var(--amber) 12%, var(--ink-800));
+    color: #eddcc2;
+  }
+
+  .rewind-warning button {
     background: none;
     border: none;
     color: var(--amber-hi);

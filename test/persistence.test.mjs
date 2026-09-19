@@ -112,6 +112,34 @@ check('a fresh server replays the same position', replayed.body.board.white.leng
 check('and the same side to move', replayed.body.turn, 'black')
 await stop(third.child)
 
+/*
+ * A take-back is not in the move list it leaves behind, so nothing that
+ * replays would know it happened. It has to be written, or a player refused
+ * after a restart is told only that it played out of turn — the same message
+ * it would get for genuinely misbehaving.
+ */
+const rewound = await json(second.base, `/api/match/${id}/undo`, {
+  method: 'POST',
+  body: JSON.stringify({ count: 1 }),
+})
+check('take back answers', rewound.status, 200)
+check('and the board says it was rewound', rewound.body.rewound.dropped, 1)
 await stop(second.child)
+
+const fourth = await startServer({ GOMOKU_STATE_DIR: STATE_DIR })
+const afterRestart = await json(fourth.base, `/api/match/${id}`)
+check('the take-back survives the restart', afterRestart.body.rewound.dropped, 1)
+check('naming the stone it removed', afterRestart.body.rewound.points, ['K10'])
+
+// Black is not on move here; the refusal must explain why rather than accuse.
+const refused = await json(fourth.base, `/api/match/${id}/play`, {
+  method: 'POST',
+  body: JSON.stringify({ seat: 'black', point: 'C3' }),
+})
+check('a stale move is refused', refused.body.error, 'not_your_turn')
+check('and the refusal still carries the take-back', refused.body.rewound.dropped, 1)
+truthy('with the version it was judged against', typeof refused.body.version === 'number')
+await stop(fourth.child)
+
 rmSync(STATE_DIR, { recursive: true, force: true })
 done()

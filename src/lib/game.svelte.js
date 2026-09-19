@@ -375,13 +375,34 @@ export async function playProvider() {
 }
 
 /**
+ * How many moves Take back would remove: the last one, or the last two when
+ * someone else answered, so the board returns to a point where it is your
+ * move again. Exported because the button has to say this before it acts.
+ */
+export function takeBackCount() {
+  if (game.history.length === 0) return 0
+  const lastWasMine = game.history.at(-1).provider === 'you'
+  return lastWasMine ? 1 : Math.min(2, game.history.length)
+}
+
+/**
+ * Whether anyone in this match is playing from outside this page.
+ *
+ * Take back is a control on one screen, but it changes a board a seat held
+ * over MCP is deciding against. That player cannot see this button, so the
+ * button has to account for it.
+ */
+export function hasAgentSeat() {
+  return game.seats.black.kind === AGENT || game.seats.white.kind === AGENT
+}
+
+/**
  * Take back the last move, or the last two when an engine answered, so the
  * board returns to a point where it is your move again.
  */
 export async function undoLastPair() {
   if (game.thinking || game.history.length === 0) return
-  const lastWasMine = game.history.at(-1).provider === 'you'
-  const count = lastWasMine ? 1 : Math.min(2, game.history.length)
+  const count = takeBackCount()
   try {
     applyState(await request(`/api/match/${game.matchId}/undo`, {
       method: 'POST',
