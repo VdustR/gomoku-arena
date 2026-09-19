@@ -9,6 +9,9 @@ between, how confident it was, and how long it took.
 The board is the constant. The engines are pluggable, and adding a new kind of
 model is a single adapter, not a rewrite.
 
+If you are an agent rather than a person, start at [AGENTS.md](AGENTS.md) — it
+is shorter, and it points at the skills in `.agents/skills/`.
+
 ## Quick start
 
 The toolchain is pinned with [mise](https://mise.jdx.dev):
@@ -178,6 +181,20 @@ Chrome's built-in model and the heuristic never touch it.
 
 A forbidden point is marked on the board before you commit to it, rather than
 rejected after the fact.
+
+## For agents
+
+[AGENTS.md](AGENTS.md) is the entry point, and three skills sit behind it:
+
+| Skill | For |
+| --- | --- |
+| `arena-play` | Taking a seat, the move loop, what gets refused, reading a game back |
+| `arena-extend` | Adding an engine, a model, or another kind of player |
+| `arena-maintain` | Changing the server, the page or the record, and the invariants that hold |
+
+They live in `.agents/skills/<name>/SKILL.md`, with `.claude/skills/<name>` and
+`.codex/skills/<name>` symlinked to them so Claude Code and Codex read the same
+file. `CLAUDE.md` is a symlink to `AGENTS.md` for the same reason.
 
 ## Tests
 
