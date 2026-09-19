@@ -11,6 +11,7 @@ import {
   createMatch,
   getMatch,
   listMatches,
+  pauseMatch,
   play,
   publicMatch,
   resetMatch,
@@ -50,7 +51,9 @@ function send(res, status, payload) {
 function fail(res, error) {
   const known = error instanceof MatchError
   const status = known
-    ? { no_such_match: 404, illegal_move: 409, not_your_turn: 409, match_over: 409, nothing_to_undo: 409 }[error.code] ?? 400
+    ? { no_such_match: 404, illegal_move: 409, not_your_turn: 409, match_over: 409, match_paused: 409, nothing_to_undo: 409 }[
+        error.code
+      ] ?? 400
     : 500
   send(res, status, {
     error: known ? error.code : 'internal_error',
@@ -144,6 +147,23 @@ export async function handleApi(req, res) {
     if (undoPath && req.method === 'POST') {
       const body = await readJson(req)
       send(res, 200, publicMatch(undoMove(undoPath[1], { count: body.count })))
+      return true
+    }
+
+    const pausePath = /^\/api\/match\/([^/]+)\/pause$/.exec(path)
+    if (pausePath && req.method === 'POST') {
+      const body = await readJson(req)
+      send(
+        res,
+        200,
+        publicMatch(
+          pauseMatch(pausePath[1], {
+            paused: body.paused !== false,
+            by: body.by ?? null,
+            note: body.note ?? null,
+          }),
+        ),
+      )
       return true
     }
 

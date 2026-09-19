@@ -28,6 +28,7 @@
     onruleset,
     onagain,
     onclear,
+    onhold,
     onlist,
     onopen,
   } = $props()
@@ -69,7 +70,9 @@
       ? `${game.winner === BLACK ? 'Black' : 'White'} won`
       : game.status === 'draw'
         ? 'Drawn — the board is full'
-        : null,
+        : game.status === 'paused'
+          ? 'On hold'
+          : null,
   )
 </script>
 
@@ -116,6 +119,28 @@
     <code class="tnum">{game.matchId ?? '—'}</code>
     <button type="button" onclick={copyId} disabled={!game.matchId}>{copied ? 'Copied' : 'Copy id'}</button>
   </div>
+
+  <!-- A hold reaches the record, unlike Pause, which only stops the engines
+       this tab is driving. Anyone else looking at the game sees it held. -->
+  <button
+    type="button"
+    class="wide"
+    onclick={() => onhold(game.status !== 'paused')}
+    disabled={game.status !== 'playing' && game.status !== 'paused'}
+  >
+    {game.status === 'paused' ? 'Resume the game' : 'Hold the game'}
+    <span class="aside">
+      {game.status === 'paused'
+        ? 'moves land again, and the game reads as live'
+        : 'moves are refused, and anyone looking sees it held rather than stuck'}
+    </span>
+  </button>
+
+  {#if game.paused}
+    <p class="consequence held">
+      Held{game.paused.by ? ` by ${game.paused.by}` : ''}{game.paused.note ? ` — ${game.paused.note}` : ''}.
+    </p>
+  {/if}
 
   <button type="button" class="earlier-toggle" onclick={toggleEarlier}>
     {earlier ? 'Hide earlier games' : 'Earlier games'}
@@ -405,6 +430,10 @@
 
   /* The rule control reaches further than the others in its panel, so it says
      so rather than leaving the reader to find out by being refused. */
+  .consequence.held {
+    color: var(--amber-hi);
+  }
+
   .consequence .warn {
     display: block;
     margin-top: 0.35rem;

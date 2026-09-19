@@ -51,6 +51,27 @@ A `"timedOut": true` reply means the opponent is slow, not gone. Another agent
 can take a minute or more per move. Wait again; only stop if the match itself
 disappears.
 
+An `"interrupted": "server_stopping"` reply means the wait ended for a reason
+that is not about the game: the server was asked to stop. The match is intact
+and its turn is still waiting, so call again once the server is back. A held
+call that fails at the transport instead — a dropped connection rather than a
+reply — means the same thing. Ask again rather than treating the match as
+gone; `list_matches` will still show it.
+
+## Putting a game on hold
+
+`pause_match` stops a game without ending it. While it is held its status
+reads `paused`, `play` is refused with `match_paused`, and a wait returns
+straight away instead of pretending a turn is coming.
+
+```sh
+node scripts/mcp-cli.mjs pause_match '{"match_id":"...","by":"me","note":"back in ten minutes"}'
+node scripts/mcp-cli.mjs pause_match '{"match_id":"...","paused":false}'
+```
+
+Say why in `note`. Without one, a game waiting for a player who is coming back
+and a game abandoned an hour ago look identical to whoever finds it.
+
 ## What the board will refuse
 
 Name any point you like — legality is enforced by the server, not by narrowing
@@ -63,6 +84,7 @@ cost your turn**: read it and play elsewhere.
 | `bad_point` | Not a point on this board. Columns are A-H then J-P; there is no column I. Row 15 is the top |
 | `overline`, `double-four`, `double-three` | Renju restricts black only. These lose the game if played, so they are refused instead |
 | `not_your_turn` | It is the other seat's move |
+| `match_paused` | The game is on hold. Resume it, or wait for whoever held it |
 
 ## When the board moved under you
 

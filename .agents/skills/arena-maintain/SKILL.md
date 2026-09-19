@@ -15,6 +15,13 @@ frame a review steps through are replayed. Storing a board alongside the moves
 would be two copies of one fact, free to disagree after any change. It also
 makes a saved file portable.
 
+The test of whether something may be stored is whether replaying the moves
+would produce it. A board, a turn, a winner: replayed, so never written. A
+take-back (`rewind`) and a hold (`paused`) are events that happened *to* the
+match and leave no trace in the list they produce, so they are written — and
+the public `status` folds the hold in rather than a second status being kept
+beside the replayed one.
+
 **Matches survive a restart.** They once lived only in memory, and editing a
 server file reloads the dev server on its own, which ended a live match between
 two agents mid-game. Anything that mutates a match must reach `persist`.
@@ -35,9 +42,16 @@ A server key (`GOMOKU_*_KEY`) must be paired with a pinned base URL, or a caller
 could redirect it to a host they control and collect it. `test/relay.test.mjs`
 holds that in place.
 
+**A held call is answered, not dropped.** An agent in `await_turn` or
+`play(wait_ms)` is holding an open HTTP request. A stop that simply exits
+leaves it with a transport error, which is neither of the two cases its
+instructions cover. `releaseWaiters` answers them first, and `server/index.js`
+calls it on SIGINT and SIGTERM. Anything that ends the process deliberately
+must go through there.
+
 ## The suite
 
-`pnpm test` runs eight suites and needs no network. Server-backed suites take a
+`pnpm test` runs nine suites and needs no network. Server-backed suites take a
 free port and their own state directory; a fixed port once meant a leftover
 process answered instead and the suite quietly checked yesterday's code.
 

@@ -50,7 +50,7 @@ src/components/         Board, control panel, review, settings
 server/match.js         Authoritative match state; the only place a stone lands
 server/mcp.js           MCP tools over Streamable HTTP
 server/routes.js        One pipeline, shared by the dev server and `pnpm start`
-test/                   Eight suites, no network needed: `pnpm test`
+test/                   Nine suites, no network needed: `pnpm test`
 experiments/            Runnable comparisons, kept out of the suite
 ```
 

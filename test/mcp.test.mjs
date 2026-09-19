@@ -52,6 +52,7 @@ check('the tool set is what the docs promise', tools, [
   'get_state',
   'list_matches',
   'new_match',
+  'pause_match',
   'play',
   'reset_match',
   'review',
@@ -207,13 +208,55 @@ check('with the turn handed over', noWait.payload.turn, 'white')
 const timedOut = await call(alice, 'await_turn', { match_id: renjuId, seat: 'black', timeout_ms: 1000 })
 check('a wait that cannot be satisfied times out cleanly', timedOut.payload.timedOut, true)
 
+/*
+ * A match can be on hold.
+ *
+ * Surviving a restart is not resuming one. A game waiting for a player who
+ * is coming back and one abandoned an hour ago have the same move list, so
+ * without a hold anyone looking at either sees a live match that is not
+ * moving — and a wait on it sits there pretending a turn is coming.
+ */
+const heldMatch = (await call(alice, 'new_match', {
+  rule_set: 'free',
+  black: { kind: 'agent', label: 'black' },
+  white: { kind: 'agent', label: 'white' },
+})).payload.id
+await call(alice, 'play', { match_id: heldMatch, seat: 'black', point: 'H8' })
+
+const held = await call(bob, 'pause_match', {
+  match_id: heldMatch,
+  by: 'harness-white',
+  note: 'stepping away, back in ten minutes',
+})
+check('a match can be put on hold', held.payload.status, 'paused')
+check('the hold says who asked', held.payload.paused.by, 'harness-white')
+check('and why', held.payload.paused.note, 'stepping away, back in ten minutes')
+
+const blocked = await call(bob, 'play', { match_id: heldMatch, seat: 'white', point: 'J9' })
+check('play is refused while a match is held', blocked.payload.error, 'match_paused')
+truthy('and the refusal repeats the reason given', blocked.payload.message.includes('back in ten minutes'))
+
+// A wait must not pretend a turn is coming to a game nobody is playing.
+const heldWait = await call(bob, 'await_turn', { match_id: heldMatch, seat: 'white', timeout_ms: 1000 })
+check('a wait on a held match returns at once', heldWait.payload.timedOut, false)
+check('saying the match is held', heldWait.payload.status, 'paused')
+
+const listedHeld = (await call(alice, 'list_matches', {})).payload.matches.find((m) => m.id === heldMatch)
+check('the listing says held rather than live', listedHeld.status, 'paused')
+
+const resumed = await call(bob, 'pause_match', { match_id: heldMatch, paused: false })
+check('the hold can be lifted', resumed.payload.status, 'playing')
+check('and the hold record goes with it', resumed.payload.paused, null)
+const afterResume = await call(bob, 'play', { match_id: heldMatch, seat: 'white', point: 'J9' })
+check('play works again', afterResume.isError, false)
+
 // Matches are independent: every one opened in this run is listed.
 const listed = await call(alice, 'list_matches', {})
-check('every match opened here is listed', listed.payload.matches.length, 3)
+check('every match opened here is listed', listed.payload.matches.length, 4)
 check(
   'and each carries its own id',
   new Set(listed.payload.matches.map((m) => m.id)).size,
-  3,
+  4,
 )
 
 /*

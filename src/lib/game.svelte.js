@@ -31,6 +31,8 @@ export const game = $state({
   board: createBoard(),
   turn: BLACK,
   status: 'playing',
+  /** The hold on this match, if someone put one there. */
+  paused: null,
   winner: null,
   winningStones: [],
   ruleSet: config.defaultRuleSet,
@@ -115,6 +117,7 @@ function applyState(view) {
   game.board = board
   game.turn = colorOf(view.turn)
   game.status = view.status
+  game.paused = view.paused ?? null
   game.winner = view.winner ? colorOf(view.winner) : null
   game.ruleSet = view.ruleSet
   game.history = view.history.map((move) => ({
@@ -249,6 +252,30 @@ export async function setSeat(color, patch) {
 
 export async function setRuleSet(ruleSet) {
   applyState(await request(`/api/match/${game.matchId}`, { method: 'PATCH', body: JSON.stringify({ ruleSet }) }))
+}
+
+/**
+ * Put this match on hold, or take it off hold.
+ *
+ * Distinct from Pause, which holds only the engines this tab drives. A hold
+ * reaches the record: moves are refused, a wait returns rather than pretending
+ * a turn is coming, and anyone else looking at the game sees it held instead
+ * of live and stuck.
+ */
+export async function holdMatch(paused = true, note = null) {
+  if (!game.matchId) return
+  if (paused) disarm()
+  try {
+    applyState(
+      await request(`/api/match/${game.matchId}/pause`, {
+        method: 'POST',
+        body: JSON.stringify({ paused, by: 'a person at the board', note }),
+      }),
+    )
+    game.error = null
+  } catch (error) {
+    game.error = { title: paused ? 'Could not hold the game' : 'Could not resume the game', detail: error.message }
+  }
 }
 
 export async function resetGame() {

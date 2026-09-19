@@ -11,6 +11,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { extname, join, normalize, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { handleServerRoutes } from './routes.js'
+import { releaseWaiters } from './match.js'
 
 const ROOT = resolve(fileURLToPath(new URL('../dist', import.meta.url)))
 const PORT = Number(process.env.PORT ?? 5273) || 5273
@@ -79,3 +80,33 @@ server.listen(PORT, HOST, () => {
   console.log(`  page   ${ROOT}`)
   console.log(`  MCP    http://127.0.0.1:${PORT}/mcp`)
 })
+
+/*
+ * Answer the held calls before going away.
+ *
+ * An agent in `await_turn` or `play(wait_ms)` is holding an open request. If
+ * the process simply exits, that request fails at the transport and the agent
+ * is left with an error that is neither "slow opponent" nor "match gone" —
+ * the only two cases its instructions cover. Releasing the waiters first
+ * turns that into an ordinary answer saying the server is stopping and the
+ * match is still there.
+ *
+ * The pause before closing is for those answers to reach their callers. It is
+ * short: a stop should still feel like a stop.
+ */
+const GRACE_MS = Number(process.env.GOMOKU_SHUTDOWN_GRACE_MS ?? 250) || 250
+let stopping = false
+
+async function shutdown() {
+  if (stopping) return
+  stopping = true
+  const released = releaseWaiters('server_stopping')
+  if (released > 0) await new Promise((done) => setTimeout(done, GRACE_MS))
+  server.closeIdleConnections?.()
+  server.close(() => process.exit(0))
+  // A keep-alive socket that never goes quiet must not hold the stop open.
+  setTimeout(() => process.exit(0), 1500).unref()
+}
+
+process.on('SIGINT', shutdown)
+process.on('SIGTERM', shutdown)

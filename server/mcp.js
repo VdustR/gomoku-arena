@@ -30,6 +30,7 @@ import {
   createMatch,
   getMatch,
   listMatches,
+  pauseMatch,
   play,
   publicMatch,
   resetMatch,
@@ -113,6 +114,15 @@ export function buildMcpServer() {
         'A take-back can remove stones that were already played. When that is what happened,',
         'the refusal and the next read both carry `rewound` naming the moves that were removed.',
         '',
+        'A match can be put on hold. Its status reads `paused`, play is refused with `match_paused`,',
+        'and a wait returns straight away rather than pretending a turn is coming. Use pause_match to',
+        'set or clear a hold, and say in `note` why, so nobody has to guess whether you are coming back.',
+        '',
+        'If a held call ends with `"interrupted": "server_stopping"` the server was asked to stop.',
+        'The match is intact and its turn is still waiting: call again once the server is back.',
+        'A held call that fails at the transport means the same thing \u2014 ask again rather than',
+        'treating the match as gone. `list_matches` will still show it.',
+        '',
         'Under renju, black additionally may not make an overline, a double four, or a double three.',
         'You will not be told what your opponent was thinking. You see the board, the move list, and nothing else.',
       ].join('\n'),
@@ -178,7 +188,7 @@ export function buildMcpServer() {
     {
       title: 'Wait for your turn',
       description:
-        'Block until the seat you name is on move, or the match ends, or the wait times out. Use this instead of polling get_state.',
+        'Block until the seat you name is on move, or the match stops running, or the wait times out. Use this instead of polling get_state. `timedOut` means the opponent is slow; `interrupted` means the wait ended for a reason that is not about the game, such as the server being asked to stop — the match is intact either way.',
       inputSchema: {
         match_id: z.string(),
         seat: seatArg,
@@ -193,9 +203,9 @@ export function buildMcpServer() {
       annotations: { readOnlyHint: true },
     },
     guard(async ({ match_id, seat, timeout_ms }) => {
-      const { timedOut } = await awaitTurn(match_id, seat, timeout_ms ?? 120_000)
+      const { timedOut, interrupted } = await awaitTurn(match_id, seat, timeout_ms ?? 120_000)
       const state = publicMatch(getMatch(match_id), { seat })
-      return ok({ timedOut, ...state })
+      return ok({ timedOut, interrupted, ...state })
     }),
   )
 
@@ -247,8 +257,13 @@ export function buildMcpServer() {
 
       if (!wait_ms) return ok(publicMatch(getMatch(match_id), { seat }))
 
-      const { timedOut } = await awaitTurn(match_id, seat, wait_ms)
-      return ok({ waitedForOpponent: true, timedOut, ...publicMatch(getMatch(match_id), { seat }) })
+      const { timedOut, interrupted } = await awaitTurn(match_id, seat, wait_ms)
+      return ok({
+        waitedForOpponent: true,
+        timedOut,
+        interrupted,
+        ...publicMatch(getMatch(match_id), { seat }),
+      })
     }),
   )
 
@@ -272,6 +287,28 @@ export function buildMcpServer() {
       inputSchema: { match_id: z.string(), seat: seatArg.optional() },
     },
     guard(async ({ match_id, seat }) => ok(publicMatch(resetMatch(match_id), { seat: seat ?? null }))),
+  )
+
+  server.registerTool(
+    'pause_match',
+    {
+      title: 'Hold a match, or take it off hold',
+      description:
+        'Put a game on hold, so it reads as held rather than as one nobody has touched. While it is held its status is `paused`, play is refused, and a wait returns immediately instead of pretending a turn is coming. Pass paused: false to resume. Say why in `note`: a game waiting for a player who is coming back and one abandoned an hour ago look identical without it.',
+      inputSchema: {
+        match_id: z.string(),
+        paused: z.boolean().optional().describe('true (default) to hold the match, false to resume it.'),
+        by: z.string().max(60).optional().describe('Who is asking. Free text, recorded as supplied.'),
+        note: z
+          .string()
+          .max(200)
+          .optional()
+          .describe('Why the game is being held, and whether it is coming back. Shown to anyone looking at the match.'),
+      },
+    },
+    guard(async ({ match_id, paused, by, note }) =>
+      ok(publicMatch(pauseMatch(match_id, { paused: paused ?? true, by: by ?? null, note: note ?? null }))),
+    ),
   )
 
   server.registerTool(
