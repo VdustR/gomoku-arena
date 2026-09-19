@@ -34,15 +34,47 @@ const ALLOW_INSECURE_HTTP = ['1', 'true', 'yes', 'on'].includes(
  */
 const ROUTES = {
   '/api/jev': {
+    provider: 'jev',
     suffix: '/systemone',
     envKey: 'GOMOKU_JEV_KEY',
     envBaseUrl: 'GOMOKU_JEV_BASE_URL',
   },
   '/api/openai': {
+    provider: 'openai',
     suffix: '/chat/completions',
     envKey: 'GOMOKU_OPENAI_KEY',
     envBaseUrl: 'GOMOKU_OPENAI_BASE_URL',
   },
+}
+
+/**
+ * Which providers this server can cover on a caller's behalf.
+ *
+ * A key set in the environment stays on the server; that is the whole point
+ * of it. So the page cannot see one, and used to refuse to play before
+ * asking: its gate looked only at localStorage, and a server configured with
+ * `GOMOKU_JEV_KEY` answered "needs a key" without ever calling the relay
+ * that would have used it.
+ *
+ * This says whether a key exists and nothing else about it — not its value,
+ * not its length, not its prefix. `problem` names a missing variable, so a
+ * half-configured server explains itself instead of failing at the first move
+ * with a 500 someone did nothing to deserve.
+ */
+function relayCapabilities() {
+  const providers = {}
+  for (const route of Object.values(ROUTES)) {
+    const hasKey = Boolean(process.env[route.envKey])
+    const hasBaseUrl = Boolean(process.env[route.envBaseUrl])
+    providers[route.provider] = {
+      canCover: hasKey && hasBaseUrl,
+      problem:
+        hasKey && !hasBaseUrl
+          ? `${route.envKey} is set without ${route.envBaseUrl}. A server key is spent on the caller's behalf, so the server has to pin where it is spent.`
+          : null,
+    }
+  }
+  return { providers }
 }
 
 function readJson(req) {
@@ -138,6 +170,12 @@ async function forward(res, { url, key, body, timeoutMs = UPSTREAM_TIMEOUT_MS })
  */
 export async function handleRelay(req, res) {
   const path = (req.url ?? '').split('?')[0]
+
+  // What the server can supply, asked for once by the page at startup.
+  if (path === '/api/relay' && req.method === 'GET') {
+    send(res, 200, relayCapabilities())
+    return true
+  }
 
   // Claim this handler's own routes first. Rejecting by method before knowing
   // whether the path belongs here would answer every other /api/ route, which

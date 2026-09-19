@@ -105,7 +105,11 @@ with the request it pays for. **Forget everything** clears it.
 
 A key is never baked into the bundle. If you run the server for yourself and
 would rather not type one, put it in `GOMOKU_JEV_KEY` or `GOMOKU_OPENAI_KEY`
-instead: the relay reads those and the browser never sees them.
+instead: the relay reads those and the browser never sees them. The page asks
+the server which providers it can cover — `GET /api/relay`, which reports that
+a key exists and nothing else about it — so a seat backed by a server key says
+*key on the server* and plays without anything being typed. A key entered in
+Settings overrides it for that browser.
 
 A server key must be paired with `GOMOKU_JEV_BASE_URL` or
 `GOMOKU_OPENAI_BASE_URL`. A server key is spent on the caller's behalf, so the

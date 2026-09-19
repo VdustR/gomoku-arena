@@ -69,6 +69,12 @@ position is optional — send it only when it fits. A prompt that grows with the
 game will fail partway through a match rather than at the start, which is the
 worst time to find out.
 
+**A key may come from either side.** Read the browser's from settings, and ask
+`serverCovers(id)` in `src/lib/relay.svelte.js` before refusing for the lack of
+one — a key in the server's environment is invisible to the page by design, and
+gating on localStorage alone once made a configured key unusable from the
+browser. The browser's key wins when both exist.
+
 **A key is the person's.** Read it from settings; never bundle one, never log
 one, and never put one in a `VITE_*` variable, which is baked into the bundle
 every visitor downloads.
