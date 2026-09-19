@@ -22,6 +22,7 @@
  */
 
 import { z } from 'zod'
+import type { RuleSetId, Side } from '../src/lib/rules.ts'
 
 /**
  * Bump this when the stored shape changes, and add a migration for the
@@ -95,10 +96,17 @@ const paused = z
  * two events above. Nothing derived may appear, and `strictObject` is what
  * says so.
  */
+/**
+ * The stored record, as a type.
+ *
+ * Derived from the schema rather than written twice, so the shape on disk and
+ * the shape in the code cannot drift apart. `server/match.ts` keeps a separate
+ * live type: everything here is something `replay` cannot produce.
+ */
 export const storedMatch = z.strictObject({
   formatVersion: z.literal(FORMAT_VERSION),
   id: z.string(),
-  ruleSet: z.enum(['free', 'renju']),
+  ruleSet: z.enum(['free', 'renju']) satisfies z.ZodType<RuleSetId>,
   seats: z.record(z.string(), seat),
   history: z.array(move),
   rejected: z.record(z.string(), z.array(refusal)),
@@ -108,6 +116,14 @@ export const storedMatch = z.strictObject({
   updatedAt: z.string(),
   version: z.number().int(),
 })
+
+export type StoredMatch = z.infer<typeof storedMatch>
+export type StoredMove = StoredMatch['history'][number]
+export type StoredSeat = StoredMatch['seats'][string]
+export type StoredRefusal = StoredMove['rejected'][number]
+export type StoredMetrics = StoredMove['metrics']
+export type Rewind = NonNullable<StoredMatch['rewind']>
+export type Hold = NonNullable<StoredMatch['paused']>
 
 /**
  * Records written before there was a version to write.
@@ -119,8 +135,16 @@ export const storedMatch = z.strictObject({
  * fails, which is the right answer — it is a record this server cannot
  * honestly claim to understand.
  */
-const MIGRATIONS = {
-  0: (raw) => ({ ...raw, formatVersion: 1 }),
+const MIGRATIONS: Record<number, (raw: UnknownRecord) => UnknownRecord> = {
+  /*
+   * Version 0 is everything written before there was a version to write.
+   * Two fields arrived after the shape settled and before it was stamped —
+   * `rewind` and `paused` — and a record from before them is not carrying a
+   * take-back or a hold, it simply predates both. Supplying the absence is a
+   * migration; it is not a loosening, because anything carrying a field the
+   * schema does not name still fails.
+   */
+  0: (raw) => ({ rewind: null, paused: null, ...raw, formatVersion: 1 }),
 }
 
 /**
@@ -131,14 +155,20 @@ const MIGRATIONS = {
  * cannot be read is one match this server will not show, and silently
  * dropping someone's game is worse than saying you could not read it.
  */
-export function readRecord(raw) {
+/** What a JSON file hands you before anything has checked it. */
+type UnknownRecord = Record<string, unknown>
+
+export type ReadResult = { ok: true; record: StoredMatch } | { ok: false; reason: string }
+
+export function readRecord(raw: unknown): ReadResult {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     return { ok: false, reason: 'not a match record' }
   }
 
-  const found = raw.formatVersion ?? 0
+  const fields = raw as UnknownRecord
+  const found = fields['formatVersion'] ?? 0
   if (typeof found !== 'number' || !Number.isInteger(found) || found < 0) {
-    return { ok: false, reason: `formatVersion is not a version: ${JSON.stringify(raw.formatVersion)}` }
+    return { ok: false, reason: `formatVersion is not a version: ${JSON.stringify(fields['formatVersion'])}` }
   }
 
   if (found > FORMAT_VERSION) {
@@ -150,7 +180,7 @@ export function readRecord(raw) {
     }
   }
 
-  let candidate = raw
+  let candidate = fields
   for (let from = found; from < FORMAT_VERSION; from += 1) {
     const migrate = MIGRATIONS[from]
     if (!migrate) return { ok: false, reason: `no migration from format ${from} to ${from + 1}` }

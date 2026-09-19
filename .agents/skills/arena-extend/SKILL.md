@@ -53,7 +53,7 @@ endpoint have far less in common than minimax and MCTS do.
 
 ## Rules a new player does not get to break
 
-**Legality is the server's.** `server/match.js` validates every move against
+**Legality is the server's.** `server/match.ts` validates every move against
 `src/lib/rules.ts`. Do not filter a player's options to keep it legal; let it
 name any point and let the board refuse. A refusal costs no turn and is kept in
 the record, which is often the most interesting thing a new player produces.

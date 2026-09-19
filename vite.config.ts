@@ -1,5 +1,5 @@
 import { svelte } from '@sveltejs/vite-plugin-svelte'
-import { serverRoutesPlugin } from './server/routes.js'
+import { serverRoutesPlugin } from './server/routes.ts'
 
 export default {
   plugins: [svelte(), serverRoutesPlugin()],

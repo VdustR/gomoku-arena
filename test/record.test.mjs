@@ -12,7 +12,7 @@
  * Run with `node test/record.test.mjs`. Needs no server and no network.
  */
 
-import { FORMAT_VERSION, readRecord } from '../server/record.js'
+import { FORMAT_VERSION, readRecord } from '../server/record.ts'
 import { reporter } from './helpers.mjs'
 
 const { check, truthy, done } = reporter()
@@ -98,6 +98,21 @@ delete unstamped.formatVersion
 const adopted = readRecord(unstamped)
 check('an unstamped record in the current shape is adopted', adopted.ok, true)
 check('and carries the version it was read as', adopted.record.formatVersion, FORMAT_VERSION)
+
+/*
+ * `rewind` and `paused` arrived after the shape settled and before it was
+ * stamped. A record from before them is not carrying a take-back or a hold,
+ * it predates both — so the migration supplies the absence rather than
+ * dropping a real game over a field that did not exist yet.
+ */
+const beforeRewind = current()
+delete beforeRewind.formatVersion
+delete beforeRewind.rewind
+delete beforeRewind.paused
+const early = readRecord(beforeRewind)
+check('a record from before rewind and paused is migrated, not dropped', early.ok, true)
+check('with no take-back', early.record?.rewind, null)
+check('and no hold', early.record?.paused, null)
 
 /*
  * A record from a newer server. Guessing at what its fields mean is how a

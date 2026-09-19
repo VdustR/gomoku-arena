@@ -38,7 +38,7 @@ export function freePort() {
 export async function startServer(env = {}) {
   const port = await freePort()
   const stateDir = env.GOMOKU_STATE_DIR ?? mkdtempSync(join(tmpdir(), 'gomoku-test-'))
-  const child = spawn(process.execPath, ['server/index.js'], {
+  const child = spawn(process.execPath, ['server/index.ts'], {
     cwd: ROOT,
     env: { ...process.env, PORT: String(port), GOMOKU_STATE_DIR: stateDir, ...env },
     stdio: 'ignore',

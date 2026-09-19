@@ -6,18 +6,19 @@
  * the two behave identically. Run `npm run build` first, then `npm start`.
  */
 
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createServer } from 'node:http'
 import { readFile, stat } from 'node:fs/promises'
 import { extname, join, normalize, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { handleServerRoutes } from './routes.js'
-import { releaseWaiters } from './match.js'
+import { handleServerRoutes } from './routes.ts'
+import { releaseWaiters } from './match.ts'
 
 const ROOT = resolve(fileURLToPath(new URL('../dist', import.meta.url)))
-const PORT = Number(process.env.PORT ?? 5273) || 5273
-const HOST = process.env.HOST ?? '127.0.0.1'
+const PORT = Number(process.env['PORT'] ?? 5273) || 5273
+const HOST = process.env['HOST'] ?? '127.0.0.1'
 
-const TYPES = {
+const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -28,14 +29,14 @@ const TYPES = {
 }
 
 /** Resolve a request path inside dist, refusing anything that escapes it. */
-function safeJoin(urlPath) {
-  const decoded = decodeURIComponent(urlPath.split('?')[0])
+function safeJoin(urlPath: string): string | null {
+  const decoded = decodeURIComponent(urlPath.split('?')[0] ?? '')
   const candidate = resolve(join(ROOT, normalize(decoded)))
   if (candidate !== ROOT && !candidate.startsWith(ROOT + '/')) return null
   return candidate
 }
 
-async function serveStatic(req, res) {
+async function serveStatic(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const path = req.url === '/' ? '/index.html' : (req.url ?? '/')
   let file = safeJoin(path)
   if (!file) {
@@ -71,7 +72,12 @@ const server = createServer(async (req, res) => {
   } catch (error) {
     res.statusCode = 500
     res.setHeader('content-type', 'application/json; charset=utf-8')
-    res.end(JSON.stringify({ ok: false, body: { error: String(error?.message ?? error) } }))
+    res.end(
+      JSON.stringify({
+        ok: false,
+        body: { error: error instanceof Error ? error.message : String(error) },
+      }),
+    )
   }
 })
 
@@ -94,10 +100,10 @@ server.listen(PORT, HOST, () => {
  * The pause before closing is for those answers to reach their callers. It is
  * short: a stop should still feel like a stop.
  */
-const GRACE_MS = Number(process.env.GOMOKU_SHUTDOWN_GRACE_MS ?? 250) || 250
+const GRACE_MS = Number(process.env['GOMOKU_SHUTDOWN_GRACE_MS'] ?? 250) || 250
 let stopping = false
 
-async function shutdown() {
+async function shutdown(): Promise<void> {
   if (stopping) return
   stopping = true
   const released = releaseWaiters('server_stopping')
