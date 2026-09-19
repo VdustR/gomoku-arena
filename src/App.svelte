@@ -122,6 +122,9 @@
   }
 
   function onSeatChange(color, value) {
+    // The banner belongs to the seat that failed; changing it answers the
+    // complaint, so leaving it up just reads as a second, stale failure.
+    game.error = null
     if (value === 'human' || value === AGENT) {
       return setSeat(color, { kind: value, label: value === AGENT ? 'Agent over MCP' : null })
     }
@@ -332,9 +335,9 @@
   .page {
     max-width: 76rem;
     margin: 0 auto;
-    padding: 1.5rem 1rem 4rem;
+    padding: 1.25rem 1rem 4rem;
     display: grid;
-    gap: 2.5rem;
+    gap: 1.5rem;
   }
 
   .masthead {
@@ -385,15 +388,19 @@
   }
 
   .intro {
-    max-width: 54ch;
+    max-width: 62ch;
     display: grid;
-    gap: 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .intro p {
+    font-size: 0.875rem;
   }
 
   h1 {
     font-family: var(--font-display);
-    font-size: clamp(2rem, 4.4vw, 3rem);
-    line-height: 1.08;
+    font-size: clamp(1.6rem, 2.8vw, 2.2rem);
+    line-height: 1.1;
     letter-spacing: -0.02em;
   }
 

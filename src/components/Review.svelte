@@ -127,7 +127,7 @@
       </thead>
       <tbody>
         <tr>
-          <th scope="row">Player</th>
+          <th scope="row">Player <span class="asserted">as supplied</span></th>
           <td>{review.sides.black.player.label ?? review.sides.black.player.kind}</td>
           <td>{review.sides.white.player.label ?? review.sides.white.player.kind}</td>
         </tr>
@@ -350,6 +350,13 @@
   .summary tbody th {
     text-align: left;
     color: var(--text-lo);
+  }
+
+  /* A name on a seat is whatever the match was opened with, not a finding. */
+  .asserted {
+    display: block;
+    font-size: 0.625rem;
+    color: #5f6577;
   }
 
   .summary td {

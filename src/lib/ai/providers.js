@@ -165,6 +165,23 @@ function promptFor(position, candidates) {
   ].join('\n')
 }
 
+/**
+ * The same question, small enough for an on-device model.
+ *
+ * A stone list grows with the game, so a prompt carrying one gets longer every
+ * move until it exceeds the context an on-device model has — which is how a
+ * match died at move 17 with "The input is too large". The candidates already
+ * carry what the choice turns on ("makes an open three and blocks the
+ * opponent's four"), so the position itself can go.
+ */
+function compactPromptFor(position, candidates) {
+  return [
+    `Gomoku, you are ${position.you_play}. Pick the best move.`,
+    ...candidates.map((move, i) => `${i}. ${move.label} — ${move.rationale}`),
+    'Answer with the number only.',
+  ].join('\n')
+}
+
 async function browserMove({ position, candidates, signal }) {
   const api = globalThis.LanguageModel ?? globalThis.ai?.languageModel
   if (!api) throw new Error('The Prompt API is not available in this browser.')
@@ -188,7 +205,26 @@ async function browserMove({ position, candidates, signal }) {
     )
   }
   try {
-    const raw = await session.prompt(promptFor(position, candidates), {
+    /*
+     * Prefer the full position, but only when this model can hold it. Newer
+     * builds expose the quota and a way to measure against it; where they do
+     * not, the compact prompt is the safe default, because the failure it
+     * avoids ends the game rather than degrading it.
+     */
+    let prompt = compactPromptFor(position, candidates)
+    let usedCompact = true
+    if (typeof session.measureInputUsage === 'function' && typeof session.inputQuota === 'number') {
+      const full = promptFor(position, candidates)
+      const needed = await session.measureInputUsage(full)
+      const room = session.inputQuota - (session.inputUsage ?? 0)
+      // Leave headroom for the schema and the reply.
+      if (needed < room * 0.6) {
+        prompt = full
+        usedCompact = false
+      }
+    }
+
+    const raw = await session.prompt(prompt, {
       responseConstraint: moveSchema(candidates.length),
       signal,
     })
@@ -202,9 +238,19 @@ async function browserMove({ position, candidates, signal }) {
         provider: BROWSER_ID,
         model: 'Gemini Nano (on-device)',
         ranked: candidates.map((c, i) => ({ label: c.label, weight: i === index ? 1 : 0 })),
-        notes: 'Structured output constrained to a shortlist index.',
+        notes: usedCompact
+          ? 'Structured output over a shortlist, with the position trimmed to fit on-device context.'
+          : 'Structured output over a shortlist, with the full position.',
       },
     }
+  } catch (error) {
+    if (error?.name === 'AbortError') throw error
+    if (String(error?.message ?? '').includes('too large')) {
+      throw new Error(
+        'The on-device model could not hold this position. Lower VITE_CANDIDATE_LIMIT, or seat a provider with more context.',
+      )
+    }
+    throw error
   } finally {
     session.destroy?.()
   }

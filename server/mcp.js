@@ -41,7 +41,13 @@ const seatArg = z.enum(['black', 'white'])
 const seatConfig = z
   .object({
     kind: z.enum(['human', 'agent', 'engine']).optional().describe('Who holds the seat. Descriptive only.'),
-    label: z.string().max(60).optional().describe('A name for the move log, e.g. "claude-code".'),
+    label: z
+      .string()
+      .max(60)
+      .optional()
+      .describe(
+        'A name for the move log, e.g. "claude-code". Free text, recorded as supplied and never verified — do not read another seat\u2019s label as evidence of what it is.',
+      ),
     assist: z
       .enum(['free', 'shortlist'])
       .optional()

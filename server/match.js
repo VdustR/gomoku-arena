@@ -487,7 +487,10 @@ export function reviewMatch(matchId) {
         [Array.from(createBoard())],
       )
       .map((frame) => Array.from(frame)),
-    note: 'thinkingMs is measured by the server and comparable across players. Everything under metrics is whatever that player could produce; check its source before comparing.',
+    note:
+      'thinkingMs is measured by the server and comparable across players. ' +
+      'Everything under metrics is whatever that player could produce; check its source before comparing. ' +
+      'A seat label is free text supplied by whoever opened the match and is not verified — a player claiming to be a given model is a claim, not a finding.',
   }
 }
 

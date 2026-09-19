@@ -37,6 +37,7 @@
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^6.2.1",
+    "playwright": "^1.63.0",
     "svelte": "^5.44.0",
     "vite-plus": "^0.3.3"
   },
