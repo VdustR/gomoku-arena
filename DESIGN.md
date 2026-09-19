@@ -32,6 +32,14 @@ from 0.55 scale. Candidate rings pulse in sequence while an engine thinks,
 staggered 70 ms apart. Probability bars scale on the compositor. Everything
 collapses under `prefers-reduced-motion`.
 
+## Waiting states
+
+A board that is about to be played on by an engine is veiled, not covered: the
+veil is paper-tinted and light enough that the grid, the star points and the
+coordinates still read. The control on it is small and in ink, and the caption
+under it carries who is about to move. Amber is the only accent this design
+has, so it is not spent on the least interesting moment of a game.
+
 ## Rules
 
 - Elevation is declared once, by shadow. No shadow-plus-border cards.

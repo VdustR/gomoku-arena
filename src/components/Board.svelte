@@ -2,7 +2,22 @@
   import { SIZE, BLACK, WHITE, EMPTY, idx, coordLabel } from '../lib/rules.js'
   import { moveLegality } from '../lib/rules.js'
 
-  let { board, turn, ruleSet, lastMove, winningStones = [], candidates = [], thinking = false, interactive = false, onplay } = $props()
+  let {
+    board,
+    turn,
+    ruleSet,
+    lastMove,
+    winningStones = [],
+    candidates = [],
+    thinking = false,
+    interactive = false,
+    onplay,
+    /** Shown over the board when the next move is this page's to drive. */
+    awaitingStart = false,
+    startLabel = 'Start',
+    onstart,
+    startCaption = '',
+  } = $props()
 
   // Geometry in board units; the SVG scales to whatever the layout gives it.
   const PAD = 1.4
@@ -208,6 +223,15 @@
       </g>
     {/if}
   </svg>
+
+    {#if awaitingStart}
+      <div class="gate">
+        <button type="button" onclick={onstart}>{startLabel}</button>
+        {#if startCaption}
+          <p>{startCaption}</p>
+        {/if}
+      </div>
+    {/if}
   </div>
 
   <p class="readout" aria-live="polite">
@@ -233,6 +257,7 @@
   }
 
   .surface {
+    position: relative;
     width: 100%;
     max-width: min(640px, 72vh);
     border-radius: var(--radius);
@@ -240,6 +265,68 @@
     cursor: crosshair;
     touch-action: manipulation;
     line-height: 0;
+  }
+
+  /*
+   * The board is the subject, so the veil is thin enough to keep the grid and
+   * the star points readable — a waiting board, not a splash screen over one.
+   * The control is small for the same reason: amber is the only accent this
+   * design has, and a play button the size of a third of the board spends all
+   * of it on the least interesting moment of the game.
+   */
+  .gate {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: 0.6rem;
+    border-radius: inherit;
+    background: rgb(233 227 214 / 0.55);
+    animation: veil 220ms var(--ease-out) both;
+  }
+
+  @keyframes veil {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .gate button {
+    white-space: nowrap;
+    line-height: 1;
+    background: var(--ink-850);
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 0.62rem 1.05rem;
+    font-family: var(--font-ui);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--paper);
+    cursor: pointer;
+    box-shadow: var(--shadow-soft);
+    transition:
+      background 160ms var(--ease-out),
+      color 160ms var(--ease-out);
+  }
+
+  .gate button:hover {
+    background: var(--ink-900);
+    color: var(--amber-hi);
+  }
+
+  .gate p {
+    margin: 0;
+    max-width: 22ch;
+    text-align: center;
+    font-family: var(--font-ui);
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: #6b6355;
   }
 
   .surface[aria-disabled='true'] {

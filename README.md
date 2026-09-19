@@ -32,6 +32,19 @@ pnpm start
 Both paths need a server of your own — see [Why a server is
 required](#why-a-server-is-required).
 
+## Starting a match
+
+When the next move belongs to an engine this page drives, the board waits
+behind a **Start** button rather than playing on its own. Two reasons: Chrome's
+on-device model refuses to open a session without a real user gesture — a
+dispatched click does not count, and the first match seated on it failed on
+exactly that — and a match that begins the instant the page loads gives nobody
+a chance to watch it begin.
+
+Playing a stone by hand arms the rest of the match by itself. A seat held by an
+agent is not gated, because it moves from its own harness and nothing here can
+hold it back.
+
 ## Who can take a seat
 
 The seat picker is grouped by what the choice costs you, not by whether

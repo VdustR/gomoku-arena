@@ -49,6 +49,19 @@ export const game = $state({
   reviewAt: 0,
   /** When the side to move was handed the turn, for the waiting indicator. */
   turnSince: Date.now(),
+  /**
+   * Whether this tab has been told to start driving engine seats.
+   *
+   * Two reasons to wait for a click rather than move on load. Chrome's
+   * on-device model refuses to start a session without a user gesture, and a
+   * dispatched event does not count — the first match seated on it failed on
+   * exactly that. And a match that begins the instant the page opens gives
+   * nobody a chance to watch it begin.
+   *
+   * It gates only the seats this page drives. A seat held by an agent moves
+   * from its own harness, which no button here can hold back.
+   */
+  armed: false,
 })
 
 let source = null
@@ -166,6 +179,7 @@ export async function startMatch({ preset = config.defaultMatch, ruleSet = game.
   game.candidates = []
   game.lastTelemetry = null
   game.autoplay = preset === 'cvc'
+  game.armed = false
   applyState(view)
   listen(view.id)
   return view
@@ -205,6 +219,7 @@ export async function resetGame() {
   game.lastTelemetry = null
   applyState(await request(`/api/match/${game.matchId}/reset`, { method: 'POST' }))
   game.autoplay = game.seats.black.kind === 'engine' && game.seats.white.kind === 'engine'
+  game.armed = false
 }
 
 async function submit(color, label, { by, latencyMs, note, metrics } = {}) {
@@ -237,10 +252,17 @@ function metricsFrom(telemetry) {
   return metrics
 }
 
+/** Let this tab start driving the engine seats. Must come from a real click. */
+export function arm() {
+  game.armed = true
+}
+
 /** A human click. Resolves to a rejection reason, or null when the move landed. */
 export async function playHuman(x, y) {
   if (game.status !== 'playing' || game.thinking) return 'not-your-turn'
   if (seatOf(game.turn).kind !== HUMAN) return 'not-your-turn'
+  // Playing by hand is itself the gesture that arms the rest of the match.
+  game.armed = true
   try {
     applyState(await submit(game.turn, coordLabel(x, y), { by: 'you' }))
     game.error = null

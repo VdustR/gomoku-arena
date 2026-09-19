@@ -16,6 +16,7 @@
     undoLastPair,
     stopThinking,
     forbiddenCopyFor,
+    arm,
     loadReview,
     closeReview,
     seekReview,
@@ -92,11 +93,27 @@
   // engines only keep going while autoplay is on, so a match can be paused.
   $effect(() => {
     if (!game.matchId || game.status !== 'playing' || game.thinking) return
+    if (!game.armed) return
     if (seatFor(game.turn).kind !== 'engine') return
     if (bothSeatsAi && !game.autoplay) return
     const timer = setTimeout(() => playProvider(), config.moveDelayMs)
     return () => clearTimeout(timer)
   })
+
+  /**
+   * The gate is for the moves this page makes. A seat held by an agent plays
+   * from its own harness, so there is nothing here to hold back and nothing
+   * to promise by showing a button.
+   */
+  const awaitingStart = $derived(
+    Boolean(game.matchId) && game.status === 'playing' && !game.armed && seatFor(game.turn).kind === 'engine',
+  )
+  const startLabel = $derived(game.history.length === 0 ? 'Start' : 'Resume')
+  /** Who is about to move is the useful part; the button just needs a verb. */
+  const startCaption = $derived(
+    `${describeSeat(game.turn)} plays ${game.turn === BLACK ? 'black' : 'white'}` +
+      (game.history.length === 0 ? ' and opens.' : ' next.'),
+  )
 
   const describeSeat = (color) => {
     const seat = seatFor(color)
@@ -215,6 +232,10 @@
         candidates={game.candidates}
         thinking={game.thinking}
         interactive={!game.review && game.status === 'playing' && !game.thinking && seatFor(game.turn).kind === 'human'}
+        awaitingStart={!game.review && awaitingStart}
+        {startLabel}
+        {startCaption}
+        onstart={arm}
         {onplay}
       />
 
@@ -252,7 +273,7 @@
         </button>
         {#if game.thinking}
           <button class="primary" onclick={stopThinking}>Stop thinking</button>
-        {:else if bothSeatsAi && game.status === 'playing'}
+        {:else if bothSeatsAi && game.status === 'playing' && game.armed}
           <button class="primary" onclick={() => (game.autoplay = !game.autoplay)}>
             {game.autoplay ? 'Pause' : 'Play on'}
           </button>
