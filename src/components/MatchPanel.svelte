@@ -14,7 +14,7 @@
 
   import TurnStatus from './TurnStatus.svelte'
   import { RULE_SETS } from '../lib/rules.ts'
-  import { PROVIDERS } from '../lib/ai/providers.js'
+  import { PROVIDERS } from '../lib/ai/providers.ts'
   import { AGENT, BLACK, WHITE } from '../lib/game.svelte.js'
 
   let {

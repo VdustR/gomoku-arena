@@ -8,10 +8,10 @@
  */
 
 import { BLACK, WHITE, SIZE, createBoard, idx, coordLabel, FORBIDDEN_COPY } from './rules.ts'
-import { chooseMove, PROVIDERS, DEFAULT_ENGINE_ID, colorName } from './ai/providers.js'
+import { chooseMove, PROVIDERS, DEFAULT_ENGINE_ID, colorName } from './ai/providers.ts'
 import { keyFor, configFor } from './settings.svelte.js'
 import { serverCovers, serverProblem } from './relay.svelte.js'
-import { config } from './config.js'
+import { config } from './config.ts'
 
 export const HUMAN = 'human'
 /** A seat played from outside this page, over MCP. Nothing here moves it. */

@@ -12,7 +12,7 @@ vendor, and a new player should not make it so.
 ## Two kinds
 
 **A search engine** reasons over the whole board. It lives in
-`src/lib/ai/engines.js` and is handed the position:
+`src/lib/ai/engines.ts` and is handed the position:
 
 ```js
 export function myMove(board, color, ruleSet, options) {
@@ -32,12 +32,26 @@ export function myMove(board, color, ruleSet, options) {
 
 Register it in `ENGINES` with a `name`, a `note` of two or three words for the
 picker, and a `tagline` that says how it decides rather than how good it is.
+`ENGINES` is `Record<string, EngineEntry>`, so a run function of the wrong
+shape is a compile error.
 
 **A model** is asked to choose from a shortlist. It lives in
-`src/lib/ai/providers.js` as an async adapter receiving `{ position,
+`src/lib/ai/providers.ts` as a `ModelAdapter`, receiving `{ position,
 candidates, key, config, signal }` and returning `{ move, latencyMs, telemetry
 }`. Register it in `PROVIDERS`, add a branch in `chooseMove`, and give it a
 `group` so the picker files it correctly.
+
+Both shapes live in **`src/lib/ai/contract.ts`** — `Engine` and `EngineEntry`
+for the first, `ModelAdapter` and `ModelRequest` for the second, and `Choice`
+for what they both return. Annotate a new adapter with the type rather than
+matching this prose by eye; the two used to be described here and checked by
+nobody.
+
+A note on `Telemetry`: every field is optional-or-absent, and under
+`exactOptionalPropertyTypes` that is not the same as present-and-undefined.
+Leave a figure out when the player did not report it. A confidence set to
+`undefined` reads in the review as a confidence, which is a claim the player
+never made.
 
 ## What the picker groups by
 

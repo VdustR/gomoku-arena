@@ -41,25 +41,32 @@
  * https://cris.maastrichtuniversity.nl/en/publications/searching-for-solutions-in-games-and-artificial-intelligence
  */
 
-import { BLACK, WHITE, EMPTY, SIZE, idx, moveLegality, coordLabel } from '../rules.ts'
-import { SHAPE_SCORES, bestShape, relevantPoints } from './heuristic.js'
+import { EMPTY, SIZE, idx, moveLegality, coordLabel, other } from '../rules.ts'
+import type { Board, RuleSetId, Side, Stone } from '../rules.ts'
+import { SHAPE_SCORES, bestShape, relevantPoints } from './heuristic.ts'
+import type { EngineEntry, EngineResult } from './contract.ts'
 
-const other = (color) => (color === BLACK ? WHITE : BLACK)
+/** One point the search is considering, with what it is worth right now. */
+interface ScoredPoint {
+  x: number
+  y: number
+  value: number
+}
 
 /**
  * How good the position at (x, y) is for `color`, counting both what it
  * builds and what it denies. Defence is discounted slightly so a win is
  * never traded for a block.
  */
-function pointValue(board, x, y, color) {
+function pointValue(board: Board, x: number, y: number, color: Side): number {
   const attack = SHAPE_SCORES[bestShape(board, x, y, color, SIZE)]
   const defend = SHAPE_SCORES[bestShape(board, x, y, other(color), SIZE)]
   return attack + defend * 0.85
 }
 
 /** Legal moves worth searching, strongest first. */
-function orderedMoves(board, color, ruleSet, limit) {
-  const scored = []
+function orderedMoves(board: Board, color: Side, ruleSet: RuleSetId, limit?: number): ScoredPoint[] {
+  const scored: ScoredPoint[] = []
   for (const [x, y] of relevantPoints(board, SIZE)) {
     if (!moveLegality(board, x, y, color, ruleSet).legal) continue
     scored.push({ x, y, value: pointValue(board, x, y, color) })
@@ -71,11 +78,11 @@ function orderedMoves(board, color, ruleSet, limit) {
 const WIN_VALUE = SHAPE_SCORES.five
 
 /** Whole-board score from `color`'s point of view. */
-function evaluate(board, color) {
+function evaluate(board: Board, color: Side): number {
   let score = 0
   for (let i = 0; i < board.length; i += 1) {
-    const cell = board[i]
-    if (cell === EMPTY) continue
+    const cell = board[i] as Stone | undefined
+    if (cell === undefined || cell === EMPTY) continue
     const x = i % SIZE
     const y = Math.floor(i / SIZE)
     // Score the shape each stone sits in by temporarily lifting it.
@@ -88,7 +95,8 @@ function evaluate(board, color) {
 }
 
 /** Would playing here complete five for `color`? */
-const wins = (board, x, y, color) => SHAPE_SCORES[bestShape(board, x, y, color, SIZE)] >= WIN_VALUE
+const wins = (board: Board, x: number, y: number, color: Side): boolean =>
+  SHAPE_SCORES[bestShape(board, x, y, color, SIZE)] >= WIN_VALUE
 
 /* ------------------------------------------------------------------ */
 /* 1. Greedy threat scoring                                            */
@@ -99,11 +107,11 @@ const wins = (board, x, y, color) => SHAPE_SCORES[bestShape(board, x, y, color, 
  * and take the best. Instant, and surprisingly hard to beat casually, but it
  * cannot see a trap one move deeper.
  */
-export function greedyMove(board, color, ruleSet) {
+export function greedyMove(board: Board, color: Side, ruleSet: RuleSetId): EngineResult | null {
   const started = performance.now()
   const moves = orderedMoves(board, color, ruleSet)
-  if (moves.length === 0) return null
   const top = moves[0]
+  if (!top) return null
   const best = Math.max(top.value, 1)
   return {
     x: top.x,
@@ -129,13 +137,24 @@ export function greedyMove(board, color, ruleSet) {
  * first, so most of the tree is never opened — Knuth and Moore (1975) is where
  * that result is proved, and where the bound on how much it saves comes from.
  */
-export function minimaxMove(board, color, ruleSet, { depth = 4, width = 10, budgetMs = 2500 } = {}) {
+export function minimaxMove(
+  board: Board,
+  color: Side,
+  ruleSet: RuleSetId,
+  { depth = 4, width = 10, budgetMs = 2500 }: { depth?: number; width?: number; budgetMs?: number } = {},
+): EngineResult | null {
   const started = performance.now()
   let nodes = 0
   let cutoffs = 0
   let outOfTime = false
 
-  const search = (position, turn, remaining, alpha, beta) => {
+  const search = (
+    position: Board,
+    turn: Side,
+    remaining: number,
+    alpha: number,
+    beta: number,
+  ): number => {
     nodes += 1
     if (performance.now() - started > budgetMs) {
       outOfTime = true
@@ -186,7 +205,7 @@ export function minimaxMove(board, color, ruleSet, { depth = 4, width = 10, budg
   if (root.length === 0) return null
 
   const position = board.slice()
-  const scored = []
+  const scored: (ScoredPoint & { score: number })[] = []
   for (const move of root) {
     if (wins(position, move.x, move.y, color)) {
       scored.push({ ...move, score: WIN_VALUE * 2 })
@@ -199,7 +218,8 @@ export function minimaxMove(board, color, ruleSet, { depth = 4, width = 10, budg
 
   scored.sort((a, b) => b.score - a.score)
   const top = scored[0]
-  const span = Math.abs(scored[0].score - scored.at(-1).score) || 1
+  if (!top) return null
+  const span = Math.abs(top.score - (scored.at(-1)?.score ?? top.score)) || 1
 
   return {
     x: top.x,
@@ -210,7 +230,7 @@ export function minimaxMove(board, color, ruleSet, { depth = 4, width = 10, budg
       model: `minimax depth ${depth}, width ${width}`,
       ranked: scored.slice(0, 6).map((m) => ({
         label: coordLabel(m.x, m.y),
-        weight: Math.max(0, 1 - (scored[0].score - m.score) / span),
+        weight: Math.max(0, 1 - (top.score - m.score) / span),
       })),
       notes:
         `${nodes.toLocaleString()} nodes, ${cutoffs} alpha-beta cutoffs` +
@@ -237,7 +257,16 @@ const UCT_C = Math.SQRT2
  * top few scored points instead. That keeps the statistics meaningful within
  * a budget a browser can afford.
  */
-export function mctsMove(board, color, ruleSet, { budgetMs = 1200, rolloutDepth = 24, rolloutWidth = 4 } = {}) {
+export function mctsMove(
+  board: Board,
+  color: Side,
+  ruleSet: RuleSetId,
+  {
+    budgetMs = 1200,
+    rolloutDepth = 24,
+    rolloutWidth = 4,
+  }: { budgetMs?: number; rolloutDepth?: number; rolloutWidth?: number } = {},
+): EngineResult | null {
   const started = performance.now()
   const rootMoves = orderedMoves(board, color, ruleSet, 12)
   if (rootMoves.length === 0) return null
@@ -250,7 +279,7 @@ export function mctsMove(board, color, ruleSet, { budgetMs = 1200, rolloutDepth 
    * and answering the opponent's five directly is what MCTS implementations
    * in tactical games normally do, and it costs nothing.
    */
-  const forced = (point, why) => ({
+  const forced = (point: ScoredPoint, why: string): EngineResult => ({
     x: point.x,
     y: point.y,
     point: coordLabel(point.x, point.y),
@@ -274,11 +303,12 @@ export function mctsMove(board, color, ruleSet, { budgetMs = 1200, rolloutDepth 
   const nodes = rootMoves.map((move) => ({ ...move, visits: 0, wins: 0 }))
   let simulations = 0
 
-  const rollout = (position, turn) => {
+  const rollout = (position: Board, start: Side): number => {
+    let turn = start
     for (let ply = 0; ply < rolloutDepth; ply += 1) {
       const moves = orderedMoves(position, turn, ruleSet, rolloutWidth)
-      if (moves.length === 0) return 0.5
       const pick = moves[Math.floor(Math.random() * moves.length)]
+      if (!pick) return 0.5
       if (wins(position, pick.x, pick.y, turn)) return turn === color ? 1 : 0
       position[idx(pick.x, pick.y)] = turn
       turn = other(turn)
@@ -290,6 +320,7 @@ export function mctsMove(board, color, ruleSet, { budgetMs = 1200, rolloutDepth 
 
   while (performance.now() - started < budgetMs) {
     let chosen = nodes[0]
+    if (!chosen) break
     let bestUct = -Infinity
     for (const node of nodes) {
       const uct =
@@ -311,6 +342,7 @@ export function mctsMove(board, color, ruleSet, { budgetMs = 1200, rolloutDepth 
 
   const ranked = [...nodes].sort((a, b) => b.visits - a.visits || b.wins - a.wins)
   const top = ranked[0]
+  if (!top) return null
   return {
     x: top.x,
     y: top.y,
@@ -329,7 +361,7 @@ export function mctsMove(board, color, ruleSet, { budgetMs = 1200, rolloutDepth 
 }
 
 /** The engines, in the order a reader should meet them. */
-export const ENGINES = {
+export const ENGINES: Record<string, EngineEntry> = {
   greedy: {
     id: 'greedy',
     name: 'Greedy scoring',

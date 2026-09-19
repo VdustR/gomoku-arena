@@ -8,18 +8,31 @@
  * model, a chat model, a typed decision model — the same shortlist to judge.
  */
 
-import { BLACK, WHITE, EMPTY, SIZE, idx, inBounds, moveLegality, coordLabel } from '../rules.ts'
-import { config } from '../config.js'
+import { BLACK, WHITE, EMPTY, SIZE, idx, inBounds, moveLegality, coordLabel, other } from '../rules.ts'
+import type { Board, Point, RuleSetId, Side, Stone } from '../rules.ts'
+import { config } from '../config.ts'
 
-export const DIRECTIONS = [
+export const DIRECTIONS: readonly Point[] = [
   [1, 0],
   [0, 1],
   [1, 1],
   [1, -1],
 ]
 
+/** Every shape a run can be, once both of its ends are accounted for. */
+export type Shape =
+  | 'five'
+  | 'open-four'
+  | 'four'
+  | 'open-three'
+  | 'three'
+  | 'open-two'
+  | 'two'
+  | 'one'
+  | 'none'
+
 /** How a run of stones reads once both of its ends are accounted for. */
-export const SHAPE_SCORES = {
+export const SHAPE_SCORES: Record<Shape, number> = {
   five: 1_000_000,
   'open-four': 100_000,
   four: 12_000,
@@ -31,7 +44,7 @@ export const SHAPE_SCORES = {
   none: 0,
 }
 
-const SHAPE_COPY = {
+const SHAPE_COPY: Record<Shape, string> = {
   five: 'makes five',
   'open-four': 'makes an open four',
   four: 'makes a four',
@@ -44,7 +57,15 @@ const SHAPE_COPY = {
 }
 
 /** Classify the run through (x, y) along one axis after `color` plays there. */
-export function shapeOnAxis(board, x, y, dx, dy, color, size) {
+export function shapeOnAxis(
+  board: Board,
+  x: number,
+  y: number,
+  dx: number,
+  dy: number,
+  color: Side,
+  size: number,
+): Shape {
   let run = 1
   let openEnds = 0
   for (const sign of [-1, 1]) {
@@ -53,7 +74,7 @@ export function shapeOnAxis(board, x, y, dx, dy, color, size) {
       const cx = x + dx * step * sign
       const cy = y + dy * step * sign
       if (!inBounds(cx, cy, size)) break
-      const cell = board[idx(cx, cy, size)]
+      const cell = board[idx(cx, cy, size)] as Stone | undefined
       if (cell === color) {
         run += 1
         step += 1
@@ -71,8 +92,8 @@ export function shapeOnAxis(board, x, y, dx, dy, color, size) {
 }
 
 /** The strongest shape (x, y) creates for `color`, across all four axes. */
-export function bestShape(board, x, y, color, size) {
-  let best = 'none'
+export function bestShape(board: Board, x: number, y: number, color: Side, size: number): Shape {
+  let best: Shape = 'none'
   for (const [dx, dy] of DIRECTIONS) {
     const shape = shapeOnAxis(board, x, y, dx, dy, color, size)
     if (SHAPE_SCORES[shape] > SHAPE_SCORES[best]) best = shape
@@ -81,9 +102,9 @@ export function bestShape(board, x, y, color, size) {
 }
 
 /** Empty points within `reach` of an existing stone — everywhere else is noise. */
-export function relevantPoints(board, size, reach = 2) {
-  const seen = new Set()
-  const points = []
+export function relevantPoints(board: Board, size: number, reach = 2): Point[] {
+  const seen = new Set<number>()
+  const points: Point[] = []
   let occupied = false
   for (let y = 0; y < size; y += 1) {
     for (let x = 0; x < size; x += 1) {
@@ -113,9 +134,33 @@ export function relevantPoints(board, size, reach = 2) {
  * The shortlist a provider chooses from, strongest first. Each entry carries
  * plain-language reasons so a model can judge it without seeing the grid.
  */
-export function candidateMoves(board, color, ruleSet, { limit = config.candidateLimit, size = SIZE } = {}) {
-  const opponent = color === BLACK ? WHITE : BLACK
-  const scored = []
+/**
+ * One move worth considering, with what it does said in words a model can
+ * judge without seeing the grid.
+ */
+export interface Candidate {
+  x: number
+  y: number
+  label: string
+  attack: Shape
+  defend: Shape
+  score: number
+  rationale: string
+}
+
+export interface CandidateOptions {
+  limit?: number
+  size?: number
+}
+
+export function candidateMoves(
+  board: Board,
+  color: Side,
+  ruleSet: RuleSetId,
+  { limit = config.candidateLimit, size = SIZE }: CandidateOptions = {},
+): Candidate[] {
+  const opponent = other(color)
+  const scored: Candidate[] = []
 
   for (const [x, y] of relevantPoints(board, size)) {
     const legality = moveLegality(board, x, y, color, ruleSet, size)
@@ -127,7 +172,7 @@ export function candidateMoves(board, color, ruleSet, { limit = config.candidate
     // so a winning move is never traded for a block.
     const score = SHAPE_SCORES[attack] + SHAPE_SCORES[defend] * 0.85
 
-    const reasons = []
+    const reasons: string[] = []
     if (attack !== 'none' && attack !== 'one') reasons.push(SHAPE_COPY[attack])
     if (SHAPE_SCORES[defend] >= SHAPE_SCORES['open-three']) {
       reasons.push(`blocks the opponent's ${defend.replace('-', ' ')}`)
@@ -159,15 +204,38 @@ export function candidateMoves(board, color, ruleSet, { limit = config.candidate
 }
 
 /** The offline opponent: take the top-scoring candidate. */
-export function heuristicPick(candidates) {
+export function heuristicPick(candidates: readonly Candidate[]): Candidate | null {
   return candidates[0] ?? null
 }
 
 /** A compact, model-readable description of the position. */
-export function describePosition(board, color, ruleSet, size = SIZE) {
-  const mine = []
-  const theirs = []
-  const opponent = color === BLACK ? WHITE : BLACK
+/**
+ * The position as a prompt carries it: flat, named, all strings.
+ *
+ * Named fields rather than an index signature. The keys are fixed, and a
+ * bag would mean every prompt builder reading them with brackets and no
+ * check that the key exists — which is exactly the sort of thing that goes
+ * wrong quietly in a template literal.
+ */
+export interface PositionSummary {
+  game: string
+  rule_set: string
+  board_size: string
+  you_play: string
+  your_stones: string
+  opponent_stones: string
+  objective: string
+}
+
+export function describePosition(
+  board: Board,
+  color: Side,
+  ruleSet: RuleSetId,
+  size: number = SIZE,
+): PositionSummary {
+  const mine: string[] = []
+  const theirs: string[] = []
+  const opponent = other(color)
   for (let y = 0; y < size; y += 1) {
     for (let x = 0; x < size; x += 1) {
       const cell = board[idx(x, y, size)]

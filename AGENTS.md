@@ -46,6 +46,7 @@ To add a player rather than change the arena, read **`arena-extend`**.
 ```
 src/lib/rules.ts        Board, win detection, renju forbidden moves
 src/lib/ai/             Engines, candidate generation, model adapters
+src/lib/ai/contract.ts  The shape every player satisfies, engines and models alike
 src/components/         Board, control panel, review, settings
 server/match.ts         Authoritative match state; the only place a stone lands
 server/record.ts        The stored shape, its version, and what a bad file gets

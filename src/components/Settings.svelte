@@ -1,6 +1,6 @@
 <script>
   import { settings, persist, forgetEverything, keyFingerprint } from '../lib/settings.svelte.js'
-  import { PROVIDERS, JEV_ID, OPENAI_ID } from '../lib/ai/providers.js'
+  import { PROVIDERS, JEV_ID, OPENAI_ID } from '../lib/ai/providers.ts'
   import { serverCovers, serverProblem } from '../lib/relay.svelte.js'
 
   let { open = $bindable(false), browserModel } = $props()

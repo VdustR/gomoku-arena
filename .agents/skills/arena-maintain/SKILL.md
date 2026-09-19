@@ -76,6 +76,12 @@ That is what `erasableSyntaxOnly` protects: no enums, no namespaces, no
 parameter properties, and `import type` where a type is what is meant. An
 import names the real file — `./rules.ts`, not `./rules.js`.
 
+**An import names the real file**, and the checker will not catch you if it
+does not. TypeScript's bundler resolution maps a `.js` specifier onto the
+`.ts` file beside it, so `vp check` passes while Node cannot find the module —
+which is exactly how the server came to start only under Vite for one commit.
+Grep for `from '…​.js'` after any rename.
+
 **A converted module keeps working for the ones that have not been converted.**
 `allowJs` is on and `checkJs` is off, so a `.ts` module may import a `.js` one
 without it becoming `any`, and the modules still waiting their turn are not

@@ -6,19 +6,14 @@
  * before checking for "unset" silently clamps every default to its minimum.
  */
 
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import { dirname, resolve } from 'node:path'
-
-const source = readFileSync(
-  resolve(dirname(fileURLToPath(import.meta.url)), '../src/lib/config.js'),
-  'utf8',
-)
-// The readers are module-private; lift them out to exercise directly.
-const readers = source.slice(source.indexOf('const text ='), source.indexOf('export const config'))
-const { text, flag, count, oneOf } = new Function(
-  `${readers}; return { text, flag, count, oneOf }`,
-)()
+/*
+ * The readers are imported, not lifted out of the file's source.
+ *
+ * This suite used to slice them out with `indexOf` and re-evaluate them,
+ * which tested a copy rather than the code that ships and depended on the
+ * module staying plain JavaScript and keeping its declarations in one order.
+ */
+import { text, flag, count, oneOf } from '../src/lib/config.ts'
 
 let pass = 0
 let fail = 0
