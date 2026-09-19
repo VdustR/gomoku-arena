@@ -31,7 +31,7 @@
     BLACK,
     WHITE,
   } from './lib/game.svelte.js'
-  import { RULE_SETS } from './lib/rules.js'
+  import { RULE_SETS } from './lib/rules.ts'
   import {
     PROVIDERS,
     PROVIDER_GROUPS,

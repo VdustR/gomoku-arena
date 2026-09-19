@@ -1,0 +1,45 @@
+{
+  // The strictest settings this code can actually hold, and the reason for
+  // each one that is not simply `strict`.
+  "compilerOptions": {
+    "target": "es2023",
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "lib": ["es2023", "dom", "dom.iterable"],
+
+    "strict": true,
+
+    // The board is indexed arithmetic throughout. `board[idx(x, y)]` really is
+    // `number | undefined`, and saying so is what stops an off-board read
+    // being mistaken for an empty point.
+    "noUncheckedIndexedAccess": true,
+
+    // `metrics`, `telemetry` and the seat fields are optional-or-absent, and
+    // the difference is load-bearing in the review: a figure nobody reported
+    // is not a figure reported as undefined.
+    "exactOptionalPropertyTypes": true,
+
+    // The metrics bag is an index signature and should read like one.
+    "noPropertyAccessFromIndexSignature": true,
+
+    "verbatimModuleSyntax": true,
+
+    // The server runs from source. Node strips types per file, which needs
+    // syntax that erases to nothing — no enums, no namespaces, no parameter
+    // properties. This flag is what keeps `node server/index.ts` and the
+    // plain-node test suites working without a build step of their own.
+    "erasableSyntaxOnly": true,
+
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+
+    // The tree is half converted. `allowJs` lets a `.ts` module import a `.js`
+    // one without it becoming `any`; `checkJs` stays off so the modules still
+    // waiting their turn are not reported as if they had been done badly.
+    "allowJs": true,
+    "checkJs": false,
+
+    "skipLibCheck": true
+  },
+  "include": ["src", "server", "test", "experiments", "scripts", "vite.config.ts"]
+}

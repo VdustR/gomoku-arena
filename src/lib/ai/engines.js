@@ -41,7 +41,7 @@
  * https://cris.maastrichtuniversity.nl/en/publications/searching-for-solutions-in-games-and-artificial-intelligence
  */
 
-import { BLACK, WHITE, EMPTY, SIZE, idx, moveLegality, coordLabel } from '../rules.js'
+import { BLACK, WHITE, EMPTY, SIZE, idx, moveLegality, coordLabel } from '../rules.ts'
 import { SHAPE_SCORES, bestShape, relevantPoints } from './heuristic.js'
 
 const other = (color) => (color === BLACK ? WHITE : BLACK)

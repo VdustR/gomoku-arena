@@ -161,7 +161,7 @@ writeFileSync(
     history: [],
     rejected: { 1: [], 2: [] },
     // The fields that make it stale: all four are replayed, never stored.
-    board: new Array(225).fill(0),
+    board: Array.from({ length: 225 }, () => 0),
     turn: 1,
     status: 'playing',
     winner: null,

@@ -210,7 +210,15 @@ file. `CLAUDE.md` is a symlink to `AGENTS.md` for the same reason.
 
 ```sh
 pnpm test
+pnpm check
 ```
+
+`pnpm check` runs Vite+'s format, lint and type checks. Type checking goes
+through tsgolint against `tsconfig.json`, so the strict settings there are
+what is enforced; there is no second toolchain. The tree is part TypeScript
+and part JavaScript while it converts, and the server runs from source either
+way — Node strips types per file, so there is no build step outside the
+browser bundle.
 
 Ten suites, no network needed:
 
@@ -275,7 +283,7 @@ board, the rules, or the UI is specific to any one vendor.
 ```
 mise.toml               Pinned node and pnpm
 index.html              Document head: metadata, fonts, JSON-LD
-src/lib/rules.js        Board, win detection, renju forbidden moves
+src/lib/rules.ts        Board, win detection, renju forbidden moves
 src/lib/config.js       Build-time configuration from VITE_*
 src/lib/settings.svelte.js  Browser-held settings (localStorage)
 src/lib/game.svelte.js  The page's client of a server-held match

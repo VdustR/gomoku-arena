@@ -8,7 +8,7 @@
  * model, a chat model, a typed decision model — the same shortlist to judge.
  */
 
-import { BLACK, WHITE, EMPTY, SIZE, idx, inBounds, moveLegality, coordLabel } from '../rules.js'
+import { BLACK, WHITE, EMPTY, SIZE, idx, inBounds, moveLegality, coordLabel } from '../rules.ts'
 import { config } from '../config.js'
 
 export const DIRECTIONS = [
