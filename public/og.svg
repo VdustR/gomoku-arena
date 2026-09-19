@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="0%" r="90%">
+      <stop offset="0%" stop-color="#14161f"/>
+      <stop offset="100%" stop-color="#0a0b0f"/>
+    </radialGradient>
+    <radialGradient id="paper" cx="42%" cy="34%" r="78%">
+      <stop offset="0%" stop-color="#f1ece1"/>
+      <stop offset="100%" stop-color="#ddd6c6"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <g transform="translate(700 100)">
+    <rect width="420" height="420" rx="14" fill="url(#paper)"/>
+    <g stroke="#9a9081" stroke-width="1.2">
+      <path d="M40 40h340M40 82h340M40 124h340M40 166h340M40 208h340M40 250h340M40 292h340M40 334h340M40 376h340"/>
+      <path d="M40 40v336M82 40v336M124 40v336M166 40v336M208 40v336M250 40v336M292 40v336M334 40v336M376 40v336"/>
+    </g>
+    <circle cx="208" cy="208" r="17" fill="#14161a"/>
+    <circle cx="250" cy="166" r="17" fill="#f6f2e8"/>
+    <circle cx="166" cy="250" r="17" fill="#14161a"/>
+    <circle cx="208" cy="124" r="17" fill="#f6f2e8"/>
+    <circle cx="124" cy="292" r="19" fill="none" stroke="#d98e2b" stroke-width="3"/>
+  </g>
+  <text x="90" y="250" font-family="Georgia, serif" font-size="66" fill="#f2f0ec">Gomoku Arena</text>
+  <text x="90" y="318" font-family="Helvetica, Arial, sans-serif" font-size="27" fill="#878ea0">Five in a row, decided by</text>
+  <text x="90" y="356" font-family="Helvetica, Arial, sans-serif" font-size="27" fill="#878ea0">whichever model you seat.</text>
+  <text x="90" y="470" font-family="ui-monospace, monospace" font-size="18" fill="#56a9a2">chrome built-in · jev-compatible · openai-compatible</text>
+</svg>

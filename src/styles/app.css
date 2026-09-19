@@ -1,0 +1,147 @@
+/* Design tokens. One dark world, chosen for the use scene: a demo you watch
+   in a dim room with the board as the only lit surface. */
+:root {
+  --ink-900: #08090c;
+  --ink-850: #0a0b0f;
+  --ink-800: #101218;
+  --ink-750: #161922;
+  --ink-700: #1d212c;
+  --ink-600: #272c39;
+  --ink-500: #39404f;
+
+  --paper: #e9e3d6;
+  --paper-dim: #d8d1c2;
+  --grid-ink: #a8a091;
+
+  --text-hi: #f2f0ec;
+  --text: #c3c7d1;
+  --text-lo: #878ea0;
+
+  --amber: #d98e2b;
+  --amber-hi: #f0a942;
+  --amber-dim: #6b4818;
+  --teal: #56a9a2;
+  --teal-hi: #78c9c1;
+  --rose: #c85a5a;
+
+  --stone-black: #14161a;
+  --stone-white: #f6f2e8;
+
+  --radius-sm: 8px;
+  --radius: 14px;
+  --radius-lg: 20px;
+
+  --shadow-soft: 0 2px 8px rgb(0 0 0 / 0.4), 0 12px 32px -8px rgb(0 0 0 / 0.55);
+  --shadow-lift: 0 4px 12px rgb(0 0 0 / 0.45), 0 24px 56px -16px rgb(0 0 0 / 0.65);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --font-display: 'Instrument Serif', Georgia, serif;
+  --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-data: 'JetBrains Mono', ui-monospace, monospace;
+
+  color-scheme: dark;
+  accent-color: var(--amber);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background:
+    radial-gradient(120ch 60ch at 50% -20%, #14161f 0%, transparent 70%),
+    var(--ink-850);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Browser surfaces the page did not draw still belong to the design. */
+::selection {
+  background: var(--amber);
+  color: var(--ink-900);
+}
+
+:root {
+  scrollbar-color: var(--ink-600) transparent;
+  scrollbar-width: thin;
+  caret-color: var(--amber);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--ink-600);
+  border-radius: 99px;
+  border: 2px solid var(--ink-850);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-500);
+}
+
+:focus-visible {
+  outline: 2px solid var(--amber-hi);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+a {
+  color: var(--text-hi);
+  text-decoration-color: var(--ink-500);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  transition: text-decoration-color 160ms var(--ease-out);
+}
+a:hover {
+  text-decoration-color: var(--amber);
+}
+
+h1,
+h2,
+h3 {
+  color: var(--text-hi);
+  font-weight: 400;
+  text-wrap: balance;
+  margin: 0;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+/* Every figure the reader might compare belongs on the same rails. */
+.tnum {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.vite/
+.DS_Store
+
+# Local configuration. `.env.example` is the documented template.
+.env
+.env.*
+!.env.example

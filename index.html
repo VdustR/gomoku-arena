@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+
+    <title>Gomoku Arena — watch AI models play five in a row</title>
+    <meta
+      name="description"
+      content="A gomoku board any model can sit at: Chrome's built-in on-device AI, any Jev-compatible decision endpoint, or any OpenAI-compatible chat endpoint. Free-style and renju rules, bring your own key, and every decision shown with its candidates, confidence, and latency."
+    />
+    <link rel="canonical" href="https://github.com/VdustR/gomoku-arena" />
+    <meta name="robots" content="index, follow" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0A0B0F" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Gomoku Arena" />
+    <meta property="og:title" content="Gomoku Arena — watch AI models play five in a row" />
+    <meta
+      property="og:description"
+      content="Play a side, or watch two engines play each other. Every move shows which engine chose it, what it was choosing between, and how long it took."
+    />
+    <meta property="og:image" content="/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="A gomoku board with black and white stones and one highlighted candidate point." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Gomoku Arena — watch AI models play five in a row" />
+    <meta
+      name="twitter:description"
+      content="Play a side, or watch two engines play each other. Every move shows which engine chose it, what it was choosing between, and how long it took."
+    />
+    <meta name="twitter:image" content="/og.png" />
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Gomoku Arena",
+        "applicationCategory": "GameApplication",
+        "operatingSystem": "Any modern browser",
+        "description": "A gomoku board any model can sit at: Chrome's built-in on-device AI, any Jev-compatible decision endpoint, or any OpenAI-compatible chat endpoint. Free-style and renju rules, bring your own key, and every decision shown with its candidates, confidence, and latency.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "license": "https://opensource.org/licenses/MIT",
+        "author": { "@type": "Person", "name": "ViPro (VdustR)" },
+        "codeRepository": "https://github.com/VdustR/gomoku-arena"
+      }
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
