@@ -2,6 +2,7 @@
   import Board from './components/Board.svelte'
   import Telemetry from './components/Telemetry.svelte'
   import SettingsDialog from './components/Settings.svelte'
+  import Review from './components/Review.svelte'
   import {
     game,
     playHuman,
@@ -14,6 +15,10 @@
     undoLastPair,
     stopThinking,
     forbiddenCopyFor,
+    loadReview,
+    closeReview,
+    seekReview,
+    reviewBoard,
     AGENT,
     BLACK,
     WHITE,
@@ -119,14 +124,19 @@
     if (value === 'human' || value === AGENT) {
       return setSeat(color, { kind: value, label: value === AGENT ? 'Agent over MCP' : null })
     }
-    return setSeat(color, { kind: 'engine', provider: value })
+    // Carry the engine's name onto the seat so a review reads "Minimax
+    // (alpha-beta)" rather than "engine".
+    return setSeat(color, { kind: 'engine', provider: value, label: PROVIDERS[value]?.name ?? value })
   }
 
   async function setPreset(preset) {
     const view = await startMatch({ preset })
     location.hash = `match=${view.id}`
+    const engine = preferredEngine()
     for (const color of [BLACK, WHITE]) {
-      if (seatFor(color).kind === 'engine') await setSeat(color, { kind: 'engine', provider: preferredEngine() })
+      if (seatFor(color).kind === 'engine') {
+        await setSeat(color, { kind: 'engine', provider: engine, label: PROVIDERS[engine]?.name ?? engine })
+      }
     }
   }
 
@@ -193,14 +203,14 @@
       </div>
 
       <Board
-        board={game.board}
+        board={game.review ? reviewBoard() : game.board}
         turn={game.turn}
         ruleSet={game.ruleSet}
-        lastMove={game.lastMove}
-        winningStones={game.winningStones}
+        lastMove={game.review ? null : game.lastMove}
+        winningStones={game.review && game.reviewAt < game.review.moves.length ? [] : game.winningStones}
         candidates={game.candidates}
         thinking={game.thinking}
-        interactive={game.status === 'playing' && !game.thinking && seatFor(game.turn).kind === 'human'}
+        interactive={!game.review && game.status === 'playing' && !game.thinking && seatFor(game.turn).kind === 'human'}
         {onplay}
       />
 
@@ -280,6 +290,21 @@
         <button class="primary" onclick={() => resetGame()}>New game</button>
       </div>
 
+      {#if !game.review && game.history.length > 0}
+        <button class="review-open" onclick={loadReview}>
+          Review this game
+          <span class="tnum">{game.history.length} moves</span>
+        </button>
+      {/if}
+
+      {#if game.review}
+        <Review
+          review={game.review}
+          at={game.reviewAt}
+          onseek={seekReview}
+          onclose={closeReview}
+        />
+      {:else}
       {#if game.seats.black.kind === AGENT || game.seats.white.kind === AGENT}
         <section class="panel mcp">
           <h3>Agent seat</h3>
@@ -297,6 +322,7 @@
         thinking={game.thinking}
         thinkingFor={game.thinkingFor}
       />
+      {/if}
     </div>
   </main>
 
@@ -655,6 +681,32 @@
   .primary:hover {
     background: var(--amber-hi);
     border-color: var(--amber-hi);
+  }
+
+  .review-open {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    width: 100%;
+    background: var(--ink-750);
+    border: 1px solid var(--ink-600);
+    border-radius: var(--radius-sm);
+    padding: 0.65rem 0.9rem;
+    font-size: 0.875rem;
+    color: var(--text);
+    cursor: pointer;
+    transition:
+      border-color 160ms var(--ease-out),
+      color 160ms var(--ease-out);
+  }
+  .review-open:hover {
+    border-color: var(--amber);
+    color: var(--text-hi);
+  }
+  .review-open span {
+    font-size: 0.75rem;
+    color: var(--text-lo);
   }
 
   .how {

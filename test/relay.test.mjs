@@ -10,17 +10,14 @@
  */
 
 import { createServer } from 'node:http'
-import { spawn } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
-import { dirname, resolve } from 'node:path'
+import { startServer as launch, stop as halt, freePort } from './helpers.mjs'
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const RELAY_PORT = 5399
-const CALLER_PORT = 8099
-const PINNED_PORT = 8100
+const CALLER_PORT = await freePort()
+const PINNED_PORT = await freePort()
 const CALLER_BASE = `http://127.0.0.1:${CALLER_PORT}/v1`
 const PINNED_BASE = `http://127.0.0.1:${PINNED_PORT}/v1`
 const SERVER_KEY = 'server-secret'
+let RELAY_BASE = ''
 
 let pass = 0
 let fail = 0
@@ -48,35 +45,19 @@ const sink = (name, port) =>
     server.listen(port, '127.0.0.1', () => ready(server))
   })
 
-/** Start the relay server with the given environment and wait for it to answer. */
+/** Start the app server with the given environment and wait for it to answer. */
 async function startRelay(env) {
-  const child = spawn(process.execPath, ['server/index.js'], {
-    cwd: ROOT,
-    env: { ...process.env, PORT: String(RELAY_PORT), ...env },
-    stdio: 'ignore',
-  })
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    try {
-      await fetch(`http://127.0.0.1:${RELAY_PORT}/`)
-      return child
-    } catch {
-      await new Promise((r) => setTimeout(r, 100))
-    }
-  }
-  child.kill()
-  throw new Error('relay did not start')
+  const started = await launch(env)
+  RELAY_BASE = started.base
+  return started.child
 }
 
-const stop = (child) =>
-  new Promise((done) => {
-    child.once('exit', done)
-    child.kill()
-  })
+const stop = halt
 
 async function call(route, body, key) {
   const headers = { 'content-type': 'application/json' }
   if (key) headers['x-provider-key'] = key
-  const response = await fetch(`http://127.0.0.1:${RELAY_PORT}${route}`, {
+  const response = await fetch(`${RELAY_BASE}${route}`, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
@@ -120,7 +101,7 @@ check(
  * before checking whether the path was even its own, which answered every
  * PATCH on the match API with "POST only" and froze the seat picker.
  */
-const patched = await fetch(`http://127.0.0.1:${RELAY_PORT}/api/match/not-a-real-id`, {
+const patched = await fetch(`${RELAY_BASE}/api/match/not-a-real-id`, {
   method: 'PATCH',
   headers: { 'content-type': 'application/json' },
   body: JSON.stringify({ black: { kind: 'engine' } }),

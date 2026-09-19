@@ -44,6 +44,9 @@ export const game = $state({
   lastMove: null,
   error: null,
   autoplay: config.defaultMatch === 'cvc',
+  /** The review record, once loaded, and where the reader is in it. */
+  review: null,
+  reviewAt: 0,
 })
 
 let source = null
@@ -174,7 +177,7 @@ export async function setSeat(color, patch) {
     [seat]: {
       kind: patch.kind ?? game.seats[seat].kind,
       assist: patch.assist ?? (patch.kind === AGENT ? 'free' : game.seats[seat].assist),
-      label: patch.label ?? null,
+      label: patch.label ?? game.seats[seat].label ?? null,
     },
   }
   applyState(await request(`/api/match/${game.matchId}`, { method: 'PATCH', body: JSON.stringify(body) }))
@@ -194,11 +197,34 @@ export async function resetGame() {
   game.autoplay = game.seats.black.kind === 'engine' && game.seats.white.kind === 'engine'
 }
 
-async function submit(color, label, { by, latencyMs } = {}) {
+async function submit(color, label, { by, latencyMs, note, metrics } = {}) {
   return request(`/api/match/${game.matchId}/play`, {
     method: 'POST',
-    body: JSON.stringify({ seat: seatKey(color), point: label, by, latencyMs }),
+    body: JSON.stringify({ seat: seatKey(color), point: label, by, latencyMs, note, metrics }),
   })
+}
+
+/**
+ * What this player can actually account for. A search engine counts its own
+ * work; a model's endpoint returns real token counts. Both are measured, as
+ * opposed to an agent reporting its own usage over MCP.
+ */
+function metricsFrom(telemetry) {
+  if (!telemetry) return null
+  const metrics = { source: 'measured', model: telemetry.model }
+  if (telemetry.confidence != null) metrics.confidence = telemetry.confidence
+  const usage = telemetry.usage ?? {}
+  for (const [from, to] of [
+    ['input_tokens', 'input_tokens'],
+    ['output_tokens', 'output_tokens'],
+    ['prompt_tokens', 'input_tokens'],
+    ['completion_tokens', 'output_tokens'],
+  ]) {
+    if (typeof usage[from] === 'number') metrics[to] = usage[from]
+  }
+  // Search engines report their work in the notes line; keep it verbatim.
+  if (telemetry.notes) metrics.work = telemetry.notes
+  return metrics
 }
 
 /** A human click. Resolves to a rejection reason, or null when the move landed. */
@@ -255,7 +281,12 @@ export async function playProvider() {
     game.lastTelemetry = result.telemetry ? { ...result.telemetry, latencyMs: result.latencyMs, color } : null
     if (!result.move) return
     applyState(
-      await submit(color, result.move.label, { by: meta?.name ?? provider, latencyMs: result.latencyMs }),
+      await submit(color, result.move.label, {
+        by: meta?.name ?? provider,
+        latencyMs: result.latencyMs,
+        note: result.telemetry?.notes ?? null,
+        metrics: metricsFrom(result.telemetry),
+      }),
     )
   } catch (error) {
     if (error?.name === 'AbortError') return
@@ -286,6 +317,41 @@ export async function undoLastPair() {
   } catch (error) {
     game.error = { title: 'Could not take that back', detail: error.message }
   }
+}
+
+/** Fetch the review record for the current match. */
+export async function loadReview() {
+  if (!game.matchId) return null
+  try {
+    const review = await request(`/api/match/${game.matchId}/review`)
+    game.review = review
+    game.reviewAt = review.moves.length
+    game.error = null
+    return review
+  } catch (error) {
+    game.error = { title: 'Could not load the review', detail: error.message }
+    return null
+  }
+}
+
+export function closeReview() {
+  game.review = null
+  game.reviewAt = 0
+}
+
+/** Move the reader through the record; the board follows. */
+export function seekReview(index) {
+  if (!game.review) return
+  game.reviewAt = Math.min(Math.max(0, index), game.review.moves.length)
+}
+
+/** The board as it stood after `reviewAt` moves. */
+export function reviewBoard() {
+  if (!game.review) return game.board
+  const frame = game.review.positions[game.reviewAt] ?? game.review.positions.at(-1)
+  const board = createBoard()
+  for (let i = 0; i < frame.length; i += 1) board[i] = frame[i]
+  return board
 }
 
 export function stopThinking() {

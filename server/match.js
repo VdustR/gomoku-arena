@@ -32,6 +32,15 @@ import { candidateMoves } from '../src/lib/ai/heuristic.js'
 const COLUMNS = 'ABCDEFGHJKLMNOPQRSTUVWXYZ'
 const MAX_MATCHES = Number(process.env.GOMOKU_MAX_MATCHES ?? 50) || 50
 
+/**
+ * What a player could tell us about a move varies by what the player is, so
+ * the record keeps whatever each one can actually produce rather than forcing
+ * one shape. `source` says where a number came from, because a search engine
+ * counting its own nodes and an agent reporting its own token use are not
+ * evidence of the same quality.
+ */
+const METRIC_SOURCES = new Set(['measured', 'reported'])
+
 /** Seat names as everyone outside this module spells them. */
 export const SEATS = { black: BLACK, white: WHITE }
 export const seatName = (color) => (color === BLACK ? 'black' : 'white')
@@ -154,6 +163,10 @@ export function createMatch({ ruleSet = 'free', black, white } = {}) {
     winningStones: [],
     history: [],
     seats: { [BLACK]: normalizeSeat(black), [WHITE]: normalizeSeat(white) },
+    /** When the side to move was handed the turn, for thinking time. */
+    turnStartedAt: Date.now(),
+    /** Illegal attempts since the current side took the turn. */
+    rejected: { [BLACK]: [], [WHITE]: [] },
     version: 0,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -220,7 +233,11 @@ export function publicMatch(match, { seat = null, includeCandidates = null } = {
       seat: seatName(move.color),
       point: move.label,
       by: move.by,
+      note: move.note,
+      thinkingMs: move.thinkingMs,
       latencyMs: move.latencyMs,
+      metrics: move.metrics,
+      rejected: move.rejected,
     })),
     updatedAt: match.updatedAt,
   }
@@ -235,8 +252,116 @@ export function publicMatch(match, { seat = null, includeCandidates = null } = {
   return view
 }
 
+const median = (values) => {
+  if (values.length === 0) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const middle = Math.floor(sorted.length / 2)
+  return sorted.length % 2 ? sorted[middle] : Math.round((sorted[middle - 1] + sorted[middle]) / 2)
+}
+
+/**
+ * Work a player did accumulates over a match; a confidence or a probability
+ * does not. Adding the second kind produces a number like 9.25 that means
+ * nothing, so those are averaged and the key says so.
+ */
+const ADDITIVE = /(_tokens|^nodes$|^cutoffs$|^playouts$|^simulations$|^calls$|_ms$|^cost)/
+
+function totalMetrics(moves) {
+  const sums = {}
+  const samples = {}
+  const sources = new Set()
+
+  for (const move of moves) {
+    if (!move.metrics) continue
+    sources.add(move.metrics.source)
+    for (const [key, value] of Object.entries(move.metrics)) {
+      if (key === 'source' || typeof value !== 'number') continue
+      if (ADDITIVE.test(key)) sums[key] = (sums[key] ?? 0) + value
+      else (samples[key] ??= []).push(value)
+    }
+  }
+
+  const averaged = {}
+  for (const [key, values] of Object.entries(samples)) {
+    const mean = values.reduce((sum, value) => sum + value, 0) / values.length
+    // Two decimals: these are ratios and scores, not counts.
+    averaged[`mean ${key}`] = Math.round(mean * 100) / 100
+  }
+
+  // A side whose account is all text still told us something: keep the
+  // sources so the summary can say so rather than reading as silence.
+  if (sources.size === 0) return null
+  return { sources: [...sources], ...sums, ...averaged }
+}
+
+/**
+ * Everything needed to go back through a finished match: each move with who
+ * played it, how long they took, what they said about it, and what they tried
+ * that the board refused — plus a per-side summary.
+ *
+ * Thinking time is measured here and is the only figure comparable across
+ * every kind of player. Everything under `metrics` is whatever that player
+ * could produce, and carries the source that produced it.
+ */
+export function reviewMatch(matchId) {
+  const match = getMatch(matchId)
+
+  const side = (color) => {
+    const moves = match.history.filter((move) => move.color === color)
+    const times = moves.map((move) => move.thinkingMs).filter((ms) => typeof ms === 'number')
+    return {
+      seat: seatName(color),
+      player: match.seats[color],
+      moves: moves.length,
+      rejected: moves.reduce((sum, move) => sum + (move.rejected?.length ?? 0), 0),
+      thinking: {
+        totalMs: times.reduce((sum, ms) => sum + ms, 0),
+        medianMs: median(times),
+        slowestMs: times.length ? Math.max(...times) : null,
+        fastestMs: times.length ? Math.min(...times) : null,
+      },
+      metrics: totalMetrics(moves),
+    }
+  }
+
+  const finishedAt = match.history.at(-1)?.at ?? null
+  return {
+    id: match.id,
+    ruleSet: match.ruleSet,
+    status: match.status,
+    winner: match.winner ? seatName(match.winner) : null,
+    winningStones: match.winningStones.map(([x, y]) => coordLabel(x, y)),
+    startedAt: match.createdAt,
+    finishedAt,
+    durationMs: finishedAt ? Date.parse(finishedAt) - Date.parse(match.createdAt) : null,
+    sides: { black: side(BLACK), white: side(WHITE) },
+    moves: match.history.map((move) => ({
+      n: move.n,
+      seat: seatName(move.color),
+      point: move.label,
+      by: move.by,
+      note: move.note,
+      thinkingMs: move.thinkingMs,
+      metrics: move.metrics,
+      rejected: move.rejected ?? [],
+      at: move.at,
+    })),
+    /** The board after each move, so a reader can step through positions. */
+    positions: match.history.reduce(
+      (frames, move) => {
+        const next = frames.at(-1).slice()
+        next[idx(move.x, move.y)] = move.color
+        frames.push(next)
+        return frames
+      },
+      [Array.from(createBoard())],
+    ).map((frame) => Array.from(frame)),
+    note: 'thinkingMs is measured by the server and comparable across players. Everything under metrics is whatever that player could produce; check its source before comparing.',
+  }
+}
+
 /** Place a stone. Throws MatchError with a reason instead of taking the turn. */
-export function play(matchId, seat, point, { by = null, latencyMs = null } = {}) {
+export function play(matchId, seat, point, { by = null, latencyMs = null, note = null, metrics = null } = {}) {
   const match = getMatch(matchId)
   const color = SEATS[seat]
   if (!color) throw new MatchError('bad_seat', `Unknown seat: ${seat}. Use "black" or "white".`)
@@ -252,7 +377,16 @@ export function play(matchId, seat, point, { by = null, latencyMs = null } = {})
     })
   }
 
-  const { x, y } = parsePoint(point)
+  let x
+  let y
+  try {
+    ;({ x, y } = parsePoint(point))
+  } catch (error) {
+    // A point that does not parse is still something the player tried.
+    match.rejected[color].push({ point: String(point), reason: 'bad-point', at: new Date().toISOString() })
+    throw error
+  }
+
   const legality = moveLegality(match.board, x, y, color, match.ruleSet)
   if (!legality.legal) {
     const copy = FORBIDDEN_COPY[legality.reason]
@@ -262,7 +396,13 @@ export function play(matchId, seat, point, { by = null, latencyMs = null } = {})
         : copy
           ? `${coordLabel(x, y)} is forbidden under renju: ${copy.label.toLowerCase()}. ${copy.detail}`
           : `${coordLabel(x, y)} is not a legal move (${legality.reason}).`
-    // The turn is untouched: name another point.
+    // The turn is untouched: name another point. What was tried is kept, so a
+    // review can show what a player considered and why it was refused.
+    match.rejected[color].push({
+      point: coordLabel(x, y),
+      reason: legality.reason,
+      at: new Date().toISOString(),
+    })
     throw new MatchError('illegal_move', message, { reason: legality.reason, point: coordLabel(x, y) })
   }
 
@@ -275,9 +415,21 @@ export function play(matchId, seat, point, { by = null, latencyMs = null } = {})
     color,
     label: coordLabel(x, y),
     by: by ?? match.seats[color].label ?? match.seats[color].kind,
+    note,
+    /*
+     * Measured here rather than taken from the caller, so both sides are on
+     * the same clock. It spans the whole wait — the player's own reasoning
+     * plus the round trip — which is what "how long did it take to move"
+     * means to someone watching the board.
+     */
+    thinkingMs: Math.max(0, Date.now() - match.turnStartedAt),
+    /** What the caller measured on its own side, when it measured anything. */
     latencyMs,
+    metrics: normalizeMetrics(metrics),
+    rejected: match.rejected[color],
     at: new Date().toISOString(),
   })
+  match.rejected[color] = []
 
   if (outcome.status === 'win') {
     match.status = 'win'
@@ -287,10 +439,30 @@ export function play(matchId, seat, point, { by = null, latencyMs = null } = {})
     match.status = 'draw'
   } else {
     match.turn = color === BLACK ? WHITE : BLACK
+    match.turnStartedAt = Date.now()
   }
 
   notify(match)
   return match
+}
+
+/**
+ * Keep whatever a player could tell us, tagged with how much it is worth.
+ * A search engine counts its own nodes; a model's endpoint returns real token
+ * counts; an agent can only report its own usage, which nothing here can
+ * check. Recording the difference is the point.
+ */
+function normalizeMetrics(metrics) {
+  if (!metrics || typeof metrics !== 'object') return null
+  const { source, ...rest } = metrics
+  const kept = {}
+  for (const [key, value] of Object.entries(rest)) {
+    if (typeof value === 'number' || typeof value === 'string' || typeof value === 'boolean') {
+      kept[key] = value
+    }
+  }
+  if (Object.keys(kept).length === 0) return null
+  return { source: METRIC_SOURCES.has(source) ? source : 'reported', ...kept }
 }
 
 /**
@@ -313,6 +485,8 @@ export function undoMove(matchId, { count = 1 } = {}) {
   match.winner = null
   match.winningStones = []
   match.turn = remaining.length % 2 === 0 ? BLACK : WHITE
+  match.turnStartedAt = Date.now()
+  match.rejected = { [BLACK]: [], [WHITE]: [] }
   notify(match)
   return match
 }
@@ -325,6 +499,8 @@ export function resetMatch(matchId) {
   match.winner = null
   match.winningStones = []
   match.history = []
+  match.turnStartedAt = Date.now()
+  match.rejected = { [BLACK]: [], [WHITE]: [] }
   notify(match)
   return match
 }

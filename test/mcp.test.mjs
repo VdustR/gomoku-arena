@@ -9,15 +9,12 @@
  * Run with `node test/mcp.test.mjs`. Needs no network.
  */
 
-import { spawn } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
-import { dirname, resolve } from 'node:path'
+import { startServer as launch, stop as halt } from './helpers.mjs'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const PORT = 5401
-const MCP_URL = new URL(`http://127.0.0.1:${PORT}/mcp`)
+const { child: serverProcess, base: BASE } = await launch()
+const MCP_URL = new URL(`${BASE}/mcp`)
 
 let pass = 0
 let fail = 0
@@ -30,24 +27,6 @@ const check = (name, actual, expected) => {
   )
 }
 const truthy = (name, value) => check(name, Boolean(value), true)
-
-async function startServer() {
-  const child = spawn(process.execPath, ['server/index.js'], {
-    cwd: ROOT,
-    env: { ...process.env, PORT: String(PORT) },
-    stdio: 'ignore',
-  })
-  for (let attempt = 0; attempt < 60; attempt += 1) {
-    try {
-      await fetch(`http://127.0.0.1:${PORT}/api/matches`)
-      return child
-    } catch {
-      await new Promise((r) => setTimeout(r, 100))
-    }
-  }
-  child.kill()
-  throw new Error('server did not start')
-}
 
 async function connect(name) {
   const client = new Client({ name, version: '1.0.0' })
@@ -62,7 +41,6 @@ const call = async (client, name, args) => {
   return { isError: Boolean(result.isError), payload: payloadOf(result) }
 }
 
-const server = await startServer()
 // Two harnesses, two independent connections.
 const alice = await connect('harness-black')
 const bob = await connect('harness-white')
@@ -76,6 +54,7 @@ check('the tool set is what the docs promise', tools, [
   'new_match',
   'play',
   'reset_match',
+  'review',
 ])
 
 const opened = await call(alice, 'new_match', {
@@ -161,6 +140,26 @@ const serialized = JSON.stringify(view.payload)
 check('no confidence leaks to the opponent', serialized.includes('confidence'), false)
 check('no probability distribution leaks either', serialized.includes('probabilities'), false)
 
+// The review is reachable from the same connection, and keeps what an agent
+// said about its moves alongside what the board refused.
+const reviewed = await call(alice, 'review', { match_id: renjuId })
+check('the review counts the moves played', reviewed.payload.moves.length, 9)
+truthy('and measures thinking time', typeof reviewed.payload.moves[0].thinkingMs === 'number')
+truthy(
+  'the refused double three is attached to the move that followed',
+  reviewed.payload.moves.at(-1).rejected.some((r) => r.reason === 'double-three'),
+)
+check('a reported metric is labelled as such', (await call(alice, 'play', {
+  match_id: matchId,
+  seat: 'black',
+  point: 'M12',
+  note: 'testing self-reported metrics',
+  metrics: { input_tokens: 42 },
+})).isError, false)
+const withMetrics = await call(alice, 'review', { match_id: matchId })
+check('self-reported numbers are kept, marked reported', withMetrics.payload.moves.at(-1).metrics.source, 'reported')
+check('with the value the agent gave', withMetrics.payload.moves.at(-1).metrics.input_tokens, 42)
+
 // A wait for a turn that is not coming reports a timeout rather than hanging.
 // After black's L12 the move is white's, so a wait for black must time out.
 const timedOut = await call(alice, 'await_turn', { match_id: renjuId, seat: 'black', timeout_ms: 1000 })
@@ -172,10 +171,7 @@ check('both matches are listed', both.payload.matches.length, 2)
 
 await alice.close()
 await bob.close()
-await new Promise((done) => {
-  server.once('exit', done)
-  server.kill()
-})
+await halt(serverProcess)
 
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

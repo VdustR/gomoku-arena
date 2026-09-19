@@ -27,6 +27,7 @@ import {
   play,
   publicMatch,
   resetMatch,
+  reviewMatch,
   updateMatch,
 } from './match.js'
 
@@ -86,6 +87,7 @@ export function buildMcpServer() {
         'A gomoku board two players share. You hold a seat and play stones on it.',
         '',
         'Typical loop: new_match (or list_matches, then get_state) → await_turn → play → repeat.',
+        'Say why you chose each point in play\u2019s note: it is kept and shown in the review.',
         'await_turn blocks until the seat you name is on move, so you do not need to poll.',
         '',
         'You may name any point, written as a column letter and a row number, e.g. H8.',
@@ -188,14 +190,46 @@ export function buildMcpServer() {
         match_id: z.string(),
         seat: seatArg,
         point: z.string().describe('Column letter then row number, e.g. H8. Columns skip I; row 15 is the top.'),
-        note: z.string().max(200).optional().describe('A short reason, kept in the move log.'),
+        note: z
+          .string()
+          .max(400)
+          .optional()
+          .describe('Why you chose this point. Kept in the move log and shown in the review, so write what you were actually weighing.'),
+        metrics: z
+          .object({
+            input_tokens: z.number().optional(),
+            output_tokens: z.number().optional(),
+            thinking_ms: z.number().optional().describe('Your own measure of how long you spent, if you have one.'),
+            model: z.string().optional(),
+          })
+          .passthrough()
+          .optional()
+          .describe(
+            'Anything you can report about this move. Nothing here can be verified, so it is recorded as self-reported. The server measures its own thinking time either way.',
+          ),
       },
       annotations: { idempotentHint: false },
     },
-    guard(async ({ match_id, seat, point, note }) => {
-      const match = play(match_id, seat, point, { by: note ? `${seat}: ${note}` : null })
+    guard(async ({ match_id, seat, point, note, metrics }) => {
+      // `by` falls back to the seat's label, which new_match set.
+      const match = play(match_id, seat, point, {
+        note: note ?? null,
+        metrics: metrics ? { source: 'reported', ...metrics } : null,
+      })
       return ok(publicMatch(match, { seat }))
     }),
+  )
+
+  server.registerTool(
+    'review',
+    {
+      title: 'Review a finished match',
+      description:
+        'Every move with who played it, how long they took, what they said about it, and what the board refused, plus a per-side summary. Thinking time is measured by the server and is the only figure comparable across players.',
+      inputSchema: { match_id: z.string() },
+      annotations: { readOnlyHint: true },
+    },
+    guard(async ({ match_id }) => ok(reviewMatch(match_id))),
   )
 
   server.registerTool(

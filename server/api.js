@@ -14,6 +14,7 @@ import {
   play,
   publicMatch,
   resetMatch,
+  reviewMatch,
   undoMove,
   updateMatch,
   watchMatch,
@@ -110,6 +111,12 @@ export async function handleApi(req, res) {
       return true
     }
 
+    const reviewPath = /^\/api\/match\/([^/]+)\/review$/.exec(path)
+    if (reviewPath && req.method === 'GET') {
+      send(res, 200, reviewMatch(reviewPath[1]))
+      return true
+    }
+
     const idMatch = /^\/api\/match\/([^/]+)$/.exec(path)
     if (idMatch && req.method === 'GET') {
       send(res, 200, publicMatch(getMatch(idMatch[1]), { seat: url.searchParams.get('seat') }))
@@ -125,7 +132,9 @@ export async function handleApi(req, res) {
       const body = await readJson(req)
       const match = play(playMatch[1], body.seat, body.point, {
         by: body.by ?? null,
+        note: body.note ?? null,
         latencyMs: body.latencyMs ?? null,
+        metrics: body.metrics ?? null,
       })
       send(res, 200, publicMatch(match, { seat: body.seat }))
       return true
