@@ -43,23 +43,27 @@ export const game = $state({
   lastTelemetry: null,
   lastMove: null,
   error: null,
-  autoplay: config.defaultMatch === 'cvc',
   /** The review record, once loaded, and where the reader is in it. */
   review: null,
   reviewAt: 0,
   /** When the side to move was handed the turn, for the waiting indicator. */
   turnSince: Date.now(),
   /**
-   * Whether this tab has been told to start driving engine seats.
+   * Whether this tab is driving its engine seats right now.
    *
-   * Two reasons to wait for a click rather than move on load. Chrome's
-   * on-device model refuses to start a session without a user gesture, and a
-   * dispatched event does not count — the first match seated on it failed on
-   * exactly that. And a match that begins the instant the page opens gives
-   * nobody a chance to watch it begin.
+   * One flag, because it answers one question. It used to share the job with
+   * an `autoplay` flag set only by the match presets, so making a game
+   * engine-versus-engine by changing a seat left the two disagreeing: Start
+   * armed the tab, the loop waited on autoplay, and the board sat still while
+   * the status claimed a player was thinking.
    *
-   * It gates only the seats this page drives. A seat held by an agent moves
-   * from its own harness, which no button here can hold back.
+   * Starting, pausing and resuming are all this. It gates only the seats this
+   * page drives — a seat held by an agent moves from its own harness, which no
+   * button here can hold back.
+   *
+   * It starts false on every match for two reasons: Chrome's on-device model
+   * refuses to open a session without a real user gesture, and a match that
+   * begins the instant the page loads gives nobody a chance to watch it begin.
    */
   armed: false,
 })
@@ -140,7 +144,6 @@ function applyState(view) {
    * needs no round trip of its own.
    */
   game.turnSince = Date.parse(view.updatedAt) || Date.now()
-  if (game.status !== 'playing') game.autoplay = false
 }
 
 const COLUMNS = 'ABCDEFGHJKLMNOPQRSTUVWXYZ'
@@ -186,7 +189,6 @@ export async function startMatch({ preset, ruleSet = game.ruleSet, seats: keep }
   game.thinking = false
   game.candidates = []
   game.lastTelemetry = null
-  game.autoplay = seats.black.kind === 'engine' && seats.white.kind === 'engine'
   game.armed = false
   applyState(view)
   listen(view.id)
@@ -256,7 +258,6 @@ export async function resetGame() {
   game.candidates = []
   game.lastTelemetry = null
   applyState(await request(`/api/match/${game.matchId}/reset`, { method: 'POST' }))
-  game.autoplay = game.seats.black.kind === 'engine' && game.seats.white.kind === 'engine'
   game.armed = false
 }
 
@@ -290,9 +291,15 @@ function metricsFrom(telemetry) {
   return metrics
 }
 
-/** Let this tab start driving the engine seats. Must come from a real click. */
+/** Start or resume driving the engine seats. Must come from a real click. */
 export function arm() {
   game.armed = true
+}
+
+/** Hold the engine seats where they are. The gate comes back as Resume. */
+export function disarm() {
+  pending?.abort()
+  game.armed = false
 }
 
 /** A human click. Resolves to a rejection reason, or null when the move landed. */
@@ -327,7 +334,6 @@ export async function playProvider() {
       title: `${meta.name} needs a key`,
       detail: `Add one in Settings to let it play ${colorName(color).toLowerCase()}. Nothing is stored outside this browser.`,
     }
-    game.autoplay = false
     return
   }
 
@@ -361,7 +367,6 @@ export async function playProvider() {
   } catch (error) {
     if (error?.name === 'AbortError') return
     game.error = { title: `${meta?.name ?? provider} could not answer`, detail: String(error?.message ?? error) }
-    game.autoplay = false
   } finally {
     game.thinking = false
     game.thinkingFor = null
@@ -383,7 +388,6 @@ export async function undoLastPair() {
       body: JSON.stringify({ count }),
     }))
     game.error = null
-    game.autoplay = false
   } catch (error) {
     game.error = { title: 'Could not take that back', detail: error.message }
   }
@@ -426,7 +430,7 @@ export function reviewBoard() {
 
 export function stopThinking() {
   pending?.abort()
-  game.autoplay = false
+  game.armed = false
 }
 
 export function forbiddenCopyFor(reason) {

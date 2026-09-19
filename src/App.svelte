@@ -17,6 +17,7 @@
     stopThinking,
     forbiddenCopyFor,
     arm,
+    disarm,
     playAgain,
     listMatches,
     loadReview,
@@ -88,13 +89,11 @@
   const bothSeatsAi = $derived(seatFor(BLACK).kind === 'engine' && seatFor(WHITE).kind === 'engine')
 
   // Drive whichever in-page engine is seated, once the board settles. A seat
-  // held by an agent is left alone: it moves over MCP, not from here. Two
-  // engines only keep going while autoplay is on, so a match can be paused.
+  // held by an agent is left alone: it moves over MCP, not from here.
   $effect(() => {
     if (!game.matchId || game.status !== 'playing' || game.thinking) return
     if (!game.armed) return
     if (seatFor(game.turn).kind !== 'engine') return
-    if (bothSeatsAi && !game.autoplay) return
     const timer = setTimeout(() => playProvider(), config.moveDelayMs)
     return () => clearTimeout(timer)
   })
@@ -103,6 +102,10 @@
    * The gate is for the moves this page makes. A seat held by an agent plays
    * from its own harness, so there is nothing here to hold back and nothing
    * to promise by showing a button.
+   *
+   * The same gate covers starting, pausing and resuming: they are one question
+   * — is this tab driving its engines — and splitting them once produced a
+   * board that sat still while the status claimed a player was thinking.
    */
   const awaitingStart = $derived(
     Boolean(game.matchId) && game.status === 'playing' && !game.armed && seatFor(game.turn).kind === 'engine',
@@ -275,10 +278,8 @@
         </button>
         {#if game.thinking}
           <button class="primary" onclick={stopThinking}>Stop thinking</button>
-        {:else if bothSeatsAi && game.status === 'playing' && game.armed}
-          <button class="primary" onclick={() => (game.autoplay = !game.autoplay)}>
-            {game.autoplay ? 'Pause' : 'Play on'}
-          </button>
+        {:else if game.armed && game.status === 'playing' && seatFor(game.turn).kind === 'engine'}
+          <button class="primary" onclick={disarm}>Pause</button>
         {:else}
           <button class="primary" onclick={loadReview} disabled={game.history.length === 0}>Review</button>
         {/if}
