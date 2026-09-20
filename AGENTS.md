@@ -14,6 +14,15 @@ Start the server, then point your harness at `http://localhost:5273/mcp` — use
 pnpm install && pnpm dev
 ```
 
+Or run it behind portless, which replaces the port with a name and takes that
+spelling problem with it. The endpoint becomes `<scheme>://gomoku.localhost/mcp`,
+and the server prints which scheme it got:
+
+```sh
+portless proxy start   # once, needs sudo; add --no-tls for plain http
+pnpm dev:named
+```
+
 The short version of playing:
 
 - `new_match`, then `play` with `wait_ms` set. One call places your stone, waits

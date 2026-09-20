@@ -11,18 +11,41 @@ pnpm start` for the built page. Either way the MCP endpoint is
 `http://localhost:5273/mcp` — use `localhost`, not `127.0.0.1`, because the dev
 server binds `[::1]` only.
 
+`pnpm dev:named` runs the same server behind portless, which drops the port and
+the spelling problem with it: the endpoint becomes `<scheme>://gomoku.localhost/mcp`.
+The proxy has to be started once, and that needs sudo to bind a privileged port:
+
+```sh
+portless proxy start            # https://gomoku.localhost
+portless proxy start --no-tls   # http://gomoku.localhost
+```
+
+Whichever you pick, the server prints the URL it is actually reachable at, and
+`scripts/mcp-cli.mjs` follows it without being told. Nothing below changes.
+
 ## Taking a seat over MCP
 
 Register the endpoint once:
 
 ```sh
 claude mcp add --transport http gomoku http://localhost:5273/mcp
+# behind portless, whichever scheme its proxy is running:
+claude mcp add --transport http gomoku https://gomoku.localhost/mcp
 ```
 
 ```toml
 # ~/.codex/config.toml
 [mcp_servers.gomoku]
 url = "http://localhost:5273/mcp"
+```
+
+Over HTTPS a client has to trust the CA portless generated. Node has honoured
+the system trust store since it began defaulting to `--use-system-ca`, so on a
+machine where `portless trust` has run this needs nothing. Where a client does
+not, point it at the CA rather than turning verification off:
+
+```sh
+NODE_EXTRA_CA_CERTS=~/.portless/ca.pem
 ```
 
 `scripts/mcp-cli.mjs` calls one tool from a shell, which is the quickest way to

@@ -14,7 +14,14 @@ if (!tool) {
   console.error("usage: node scripts/mcp-cli.mjs <tool> '<json args>'")
   process.exit(2)
 }
-const url = process.env.GOMOKU_MCP_URL ?? 'http://localhost:5273/mcp'
+/*
+ * The endpoint, in the order of how much the caller meant it: an explicit
+ * `GOMOKU_MCP_URL`, then whatever portless is serving this under, then the
+ * default port. `PORTLESS_URL` carries its own scheme, so this works the
+ * same whether the proxy is running HTTPS or `--no-tls`.
+ */
+const portless = process.env.PORTLESS_URL
+const url = process.env.GOMOKU_MCP_URL ?? (portless ? `${portless}/mcp` : 'http://localhost:5273/mcp')
 const client = new Client({ name: process.env.MCP_CLIENT_NAME ?? 'mcp-cli', version: '1.0.0' })
 await client.connect(new StreamableHTTPClientTransport(new URL(url)))
 const result = await client.callTool({ name: tool, arguments: JSON.parse(rest.join(' ') || '{}') })

@@ -81,10 +81,22 @@ const server = createServer(async (req, res) => {
   }
 })
 
+/**
+ * Where this server can actually be reached.
+ *
+ * Under portless the app is given a random port and reached by name, and
+ * `PORTLESS_URL` carries the whole public URL including the scheme — so the
+ * same line is right whether the proxy is running HTTPS or `--no-tls`.
+ * Without it, the honest answer is the interface that was bound, which is
+ * not always the `localhost` spelling the dev server wants: `pnpm start`
+ * binds `127.0.0.1`, and those are two different servers.
+ */
+const publicUrl = process.env['PORTLESS_URL'] ?? `http://${HOST}:${PORT}`
+
 server.listen(PORT, HOST, () => {
-  console.log(`Gomoku Arena on http://gomoku.localhost:${PORT}`)
+  console.log(`Gomoku Arena on ${publicUrl}`)
   console.log(`  page   ${ROOT}`)
-  console.log(`  MCP    http://127.0.0.1:${PORT}/mcp`)
+  console.log(`  MCP    ${publicUrl}/mcp`)
 })
 
 /*
