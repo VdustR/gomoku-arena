@@ -33,7 +33,23 @@ const client = new Client({ name: process.env['MCP_CLIENT_NAME'] ?? 'mcp-cli', v
  * the whole project.
  */
 await client.connect(new StreamableHTTPClientTransport(new URL(url)) as never)
-const result = await client.callTool({ name: tool, arguments: JSON.parse(rest.join(' ') || '{}') })
+const toolArguments: Record<string, unknown> = JSON.parse(rest.join(' ') || '{}')
+/*
+ * The SDK's request timeout is a different clock from the tool's own wait.
+ *
+ * `callTool` defaults to 60s (`DEFAULT_REQUEST_TIMEOUT_MSEC`) no matter what
+ * `wait_ms` or `timeout_ms` the call carries, so `play` with a multi-minute
+ * wait was being cut off by the client while the server was still holding the
+ * turn open — surfacing as `MCP error -32001: Request timed out` rather than
+ * as an answer. Derive the client's timeout from the tool's own wait, with
+ * slack, so the server's timeout is the one that fires.
+ */
+const toolWaitMs = Number(toolArguments['wait_ms'] ?? toolArguments['timeout_ms'] ?? 0)
+const requestTimeoutMs = Math.max(60_000, toolWaitMs + 30_000)
+const result = await client.callTool({ name: tool, arguments: toolArguments }, undefined, {
+  timeout: requestTimeoutMs,
+  maxTotalTimeout: requestTimeoutMs,
+})
 /*
  * The SDK types `content` as a union of block kinds, and only the text block
  * carries `text`. Narrowing rather than asserting keeps a non-text reply from
