@@ -39,6 +39,84 @@ const page = await context.newPage()
 await page.goto(`${BASE}/#match=${MATCH}`, { waitUntil: 'networkidle' })
 
 /*
+ * A recorder is a spectator, and the page does not know that.
+ *
+ * Two things it renders for whoever is sitting at it made the first
+ * recordings misleading rather than merely untidy:
+ *
+ * 1. The start gate. Any seat the page *could* drive puts a Start button —
+ *    "Resume" once a stone has landed — in the middle of the board. This tab
+ *    never arms itself, so the button is dead, but it sat over the centre of
+ *    the position for the whole of a 127-move game.
+ *
+ * 2. The matchup line. For a seat the server calls an engine the page names
+ *    its own local provider pick, not the seat the match is actually being
+ *    played by. A fresh profile defaults both seats to the on-device model,
+ *    so a jev-versus-Chrome game was captioned "Chrome built-in AI vs Chrome
+ *    built-in AI".
+ *
+ * Neither is fixed here by changing what the page believes. The gate is
+ * hidden, and the caption is taken from the server's own record — the same
+ * labels `review` reports — so the video agrees with the record it documents.
+ */
+const review = await fetch(`${BASE}/api/match/${MATCH}/review`)
+  .then((r) => (r.ok ? r.json() : null))
+  .catch(() => null)
+const seatLabel = (side) => {
+  const player = review?.sides?.[side]?.player
+  return player?.label ?? player?.kind ?? side
+}
+const matchup = review ? `${seatLabel('black')} vs ${seatLabel('white')}` : null
+
+await page.addStyleTag({ content: '.gate { display: none !important; }' })
+if (review) {
+  await page.evaluate(
+    ({ matchup, black, white }) => {
+      const heading = () =>
+        [...document.querySelectorAll('main *')].find(
+          (el) => el.children.length === 0 && / vs /.test(el.textContent ?? ''),
+        )
+      const set = (el, text) => {
+        if (el && el.textContent !== text) el.textContent = text
+      }
+      /*
+       * Svelte owns these nodes and rewrites them on every sync, so the labels
+       * are re-applied rather than set once. The two seat names in "this match"
+       * are black then white in document order; the moves list below them uses
+       * a different class and is left alone, because the name it prints per
+       * move already comes from the server.
+       */
+      /*
+       * "Change a seat" names the provider this tab would drive with, which is
+       * the same local pick that mislabelled the caption. Left visible it
+       * contradicts the seats printed directly above it, so the control is
+       * dropped from the recording rather than corrected: a spectator has
+       * nothing to change.
+       */
+      const hideSeatPicker = () => {
+        for (const section of document.querySelectorAll('section')) {
+          const h = section.querySelector('h1, h2, h3, h4')
+          if (h && /change a seat/i.test(h.textContent ?? '')) section.style.display = 'none'
+        }
+      }
+      const apply = () => {
+        set(heading(), matchup)
+        const seats = document.querySelectorAll('.who > .name')
+        if (seats.length === 2) {
+          set(seats[0], black)
+          set(seats[1], white)
+        }
+        hideSeatPicker()
+      }
+      apply()
+      setInterval(apply, 400)
+    },
+    { matchup, black: seatLabel('black'), white: seatLabel('white') },
+  )
+  console.log(`captioned as: ${matchup}`)
+}
+
+/*
  * Frame the game, not the pitch. The first recording opened at the top of the
  * page, so the board was cut off at the bottom and the panel never appeared —
  * ten minutes of footage with the interesting half off screen.
