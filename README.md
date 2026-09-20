@@ -206,6 +206,41 @@ They live in `.agents/skills/<name>/SKILL.md`, with `.claude/skills/<name>` and
 `.codex/skills/<name>` symlinked to them so Claude Code and Codex read the same
 file. `CLAUDE.md` is a symlink to `AGENTS.md` for the same reason.
 
+## A name instead of a port
+
+`pnpm dev` serves the page at `http://localhost:5273`. [portless][] replaces
+that port with a stable name, which matters here for two reasons: the MCP
+endpoint is something agents are told once and keep, and the `localhost` /
+`127.0.0.1` distinction above stops mattering, because the proxy listens on
+both.
+
+```sh
+portless proxy start   # once. Needs sudo to bind a privileged port.
+pnpm dev:named         # -> https://gomoku.localhost
+```
+
+**Read the URL it prints rather than assuming one.** `portless.json` pins the
+name to `gomoku`, but portless prefixes it on a branch — on `feat/portless` the
+host is `portless.gomoku.localhost`, and without sudo the proxy falls back to
+port 1355. That is why nothing here hardcodes the host: `PORTLESS_URL` carries
+the whole URL, the server prints what it is actually reachable at, and
+`scripts/mcp-cli.mjs` follows it.
+
+`portless proxy start --no-tls` serves the same thing over plain http instead.
+
+Over HTTPS a client must trust the CA portless generated on first run. Node
+honours the system trust store by default, so on a machine where `portless
+trust` has run this needs nothing; where a client does not, give it the CA
+rather than disabling verification:
+
+```sh
+NODE_EXTRA_CA_CERTS=~/.portless/ca.pem
+```
+
+Running without portless is unchanged and needs nothing installed.
+
+[portless]: https://portless.sh
+
 ## Tests
 
 ```sh
