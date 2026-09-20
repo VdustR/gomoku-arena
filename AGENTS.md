@@ -60,3 +60,9 @@ experiments/            Runnable comparisons, kept out of the suite
 Skills live in `.agents/skills/<name>/SKILL.md`, with `.claude/skills/<name>`
 and `.codex/skills/<name>` symlinked to them so both harnesses read the same
 file. Adding a skill means adding those two links.
+
+`.claude/launch.json` starts the dev server in a harness that reads it, at
+`http://localhost:5273` — the spelling that works, rather than the
+`127.0.0.1` that does not. It is committed for that one reason: the binding
+is written down three times in prose because it kept costing time, and this
+is the copy a tool obeys without anybody reading it.
