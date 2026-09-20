@@ -36,7 +36,12 @@
     PROVIDERS,
     PROVIDER_GROUPS,
     BROWSER_ID,
+    BROWSER_SHORTLISTED_ID,
+    BROWSER_UNAIDED_ID,
     JEV_ID,
+    JEV_SHORTLISTED_ID,
+    JEV_UNAIDED_ID,
+    baseProviderOf,
     OPENAI_ID,
     DEFAULT_ENGINE_ID,
     detectBrowserModel,
@@ -86,7 +91,11 @@
       .then((result) => {
         browserModel = result
         const preferred =
-          result.supported && config.preferBrowserModel ? BROWSER_ID : settings.jevKey ? JEV_ID : DEFAULT_ENGINE_ID
+          result.supported && config.preferBrowserModel
+            ? BROWSER_SHORTLISTED_ID
+            : settings.jevKey
+              ? JEV_SHORTLISTED_ID
+              : DEFAULT_ENGINE_ID
         for (const color of [BLACK, WHITE] as const) {
           const seat = game.seats[color === BLACK ? 'black' : 'white']
           if (seat.kind === 'engine') void setSeat(color, { kind: 'engine', provider: preferred })
@@ -116,7 +125,7 @@
 
   const availableProviders = $derived(
     Object.values(PROVIDERS)
-      .filter((p: ProviderMeta) => p.id !== BROWSER_ID || browserModel?.supported)
+      .filter((p: ProviderMeta) => baseProviderOf(p.id) !== BROWSER_ID || browserModel?.supported)
       .map((p: ProviderMeta) => (p.needsKey ? { ...p, note: keyNoteFor(p.id) } : p)),
   )
 
@@ -186,8 +195,8 @@
   }
 
   function preferredEngine(): string {
-    if (browserModel?.supported && config.preferBrowserModel) return BROWSER_ID
-    return settings.jevKey ? JEV_ID : DEFAULT_ENGINE_ID
+    if (browserModel?.supported && config.preferBrowserModel) return BROWSER_SHORTLISTED_ID
+    return settings.jevKey ? JEV_SHORTLISTED_ID : DEFAULT_ENGINE_ID
   }
 
   function onSeatChange(color: Side, value: string): Promise<void> {
@@ -225,8 +234,10 @@
     'greedy',
     'minimax',
     'mcts',
-    BROWSER_ID,
-    JEV_ID,
+    BROWSER_SHORTLISTED_ID,
+    BROWSER_UNAIDED_ID,
+    JEV_SHORTLISTED_ID,
+    JEV_UNAIDED_ID,
     OPENAI_ID,
   ].flatMap((id) => PROVIDERS[id] ?? [])
 
@@ -391,7 +402,9 @@
     <h2>What can take a seat</h2>
     <div class="providers">
       {#each SHOWCASE as provider}
-        <article class:unavailable={provider.id === BROWSER_ID && browserModel && !browserModel.supported}>
+        <article
+          class:unavailable={baseProviderOf(provider.id) === BROWSER_ID && browserModel && !browserModel.supported}
+        >
           <h3>{provider.name}</h3>
           <p>{provider.tagline}</p>
           {#if provider.isEngine}
@@ -403,9 +416,9 @@
                 {provider.source?.label}
               {/if}
             </p>
-          {:else if provider.id === BROWSER_ID}
+          {:else if baseProviderOf(provider.id) === BROWSER_ID}
             <p class="status">{browserModel?.detail ?? 'Checking this browser…'}</p>
-          {:else if provider.id === JEV_ID}
+          {:else if baseProviderOf(provider.id) === JEV_ID}
             <p class="status">
               Point it at TypeSafe, or at your own server — localjev and openjev speak the same wire API.
             </p>

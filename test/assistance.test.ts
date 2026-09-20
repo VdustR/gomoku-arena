@@ -93,23 +93,40 @@ describe('a variant is the same model, differently assisted', () => {
   })
 })
 
-describe('the default profile is unchanged', () => {
+describe('no seat runs with every aid on', () => {
   /*
-   * The seats the earlier tournament ran on. If these move, results recorded
-   * against them stop being reproducible.
+   * The removed level handed the model eight points, sorted by the
+   * heuristic's own score, each annotated with what it did, and played the
+   * move itself whenever a five was available. A seat set up that way posted
+   * a complete game without the model contributing a decision, and the
+   * record could not tell that apart from a real one. It is gone rather than
+   * deprecated, so nothing can select it by accident.
    */
-  it.each([JEV_ID, BROWSER_ID])('%s still narrows, ranks, explains and shortcuts', (id) => {
-    const aid = assistanceFor(id)
-    expect(aid.candidateLimit).toBeGreaterThan(0)
-    expect(aid.rationale).toBe(true)
-    expect(aid.forced).toBe(true)
-    expect(aid.ranked).toBe(true)
+  it('does not offer the old full-assist seats in the picker', () => {
+    expect(PROVIDERS[JEV_ID]).toBeUndefined()
+    expect(PROVIDERS[BROWSER_ID]).toBeUndefined()
   })
 
-  it('offers the heuristic’s own favourite first, with its reading attached', () => {
-    const { list } = offered(JEV_ID)
-    expect(list[0]?.label).toBe('J5')
-    expect(list[0]?.rationale).toBeTruthy()
+  it('keeps those ids working as endpoints for the variants', () => {
+    // They are still what says which adapter and which key a variant uses.
+    expect(baseProviderOf(JEV_SHORTLISTED_ID)).toBe(JEV_ID)
+    expect(baseProviderOf(BROWSER_UNAIDED_ID)).toBe(BROWSER_ID)
+  })
+
+  it('never hands any registered seat the heuristic ranking or the shortcut', () => {
+    for (const [id, meta] of Object.entries(PROVIDERS)) {
+      if (meta.group !== 'model') continue
+      const aid = assistanceFor(id)
+      expect(aid.forced, `${id} must not play its own move`).toBe(false)
+      expect(aid.rationale, `${id} must not be handed the reading`).toBe(false)
+      expect(aid.ranked, `${id} must not be handed the ranking`).toBe(false)
+    }
+  })
+
+  it('falls back to the shortlisted level for an unknown seat', () => {
+    const aid = assistanceFor('not-a-provider')
+    expect(aid.forced).toBe(false)
+    expect(aid.rationale).toBe(false)
   })
 })
 
