@@ -6,22 +6,23 @@
  * the match ends. Headless keeps the recording off the real screen — no
  * window focus taken, no pointer moved, nothing else composited into frame.
  *
- *   node experiments/record-match.mjs <match-id> [out.mp4]
+ *   node experiments/record-match.ts <match-id> [out.mp4]
  */
 
 import { chromium } from 'playwright'
 import { spawn } from 'node:child_process'
-import { mkdirSync, renameSync, rmSync } from 'node:fs'
+import { mkdirSync, rmSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
+import type { PublicMatch, Review, SeatName } from '../server/match.ts'
 
 const MATCH = process.argv[2]
 const OUT = resolve(process.argv[3] ?? `out/match-${MATCH}.mp4`)
-const BASE = process.env.GOMOKU_URL ?? 'http://localhost:5273'
+const BASE = process.env['GOMOKU_URL'] ?? 'http://localhost:5273'
 const SIZE = { width: 1280, height: 860 }
-const MAX_MS = Number(process.env.RECORD_MAX_MS ?? 45 * 60 * 1000)
+const MAX_MS = Number(process.env['RECORD_MAX_MS'] ?? 45 * 60 * 1000)
 
 if (!MATCH) {
-  console.error('usage: node experiments/record-match.mjs <match-id> [out.mp4]')
+  console.error('usage: node experiments/record-match.ts <match-id> [out.mp4]')
   process.exit(2)
 }
 
@@ -60,10 +61,10 @@ await page.goto(`${BASE}/#match=${MATCH}`, { waitUntil: 'networkidle' })
  * labels `review` reports — so the video agrees with the record it documents.
  */
 const review = await fetch(`${BASE}/api/match/${MATCH}/review`)
-  .then((r) => (r.ok ? r.json() : null))
+  .then((r) => (r.ok ? (r.json() as Promise<Review>) : null))
   .catch(() => null)
-const seatLabel = (side) => {
-  const player = review?.sides?.[side]?.player
+const seatLabel = (side: SeatName): string => {
+  const player = review?.sides[side]?.player
   return player?.label ?? player?.kind ?? side
 }
 const matchup = review ? `${seatLabel('black')} vs ${seatLabel('white')}` : null
@@ -71,12 +72,12 @@ const matchup = review ? `${seatLabel('black')} vs ${seatLabel('white')}` : null
 await page.addStyleTag({ content: '.gate { display: none !important; }' })
 if (review) {
   await page.evaluate(
-    ({ matchup, black, white }) => {
-      const heading = () =>
+    ({ matchup, black, white }: { matchup: string | null; black: string; white: string }) => {
+      const heading = (): Element | undefined =>
         [...document.querySelectorAll('main *')].find(
           (el) => el.children.length === 0 && / vs /.test(el.textContent ?? ''),
         )
-      const set = (el, text) => {
+      const set = (el: Element | undefined, text: string | null): void => {
         if (el && el.textContent !== text) el.textContent = text
       }
       /*
@@ -93,13 +94,13 @@ if (review) {
        * dropped from the recording rather than corrected: a spectator has
        * nothing to change.
        */
-      const hideSeatPicker = () => {
+      const hideSeatPicker = (): void => {
         for (const section of document.querySelectorAll('section')) {
           const h = section.querySelector('h1, h2, h3, h4')
           if (h && /change a seat/i.test(h.textContent ?? '')) section.style.display = 'none'
         }
       }
-      const apply = () => {
+      const apply = (): void => {
         set(heading(), matchup)
         const seats = document.querySelectorAll('.who > .name')
         if (seats.length === 2) {
@@ -141,7 +142,7 @@ for (;;) {
     console.log('the match is no longer available; stopping')
     break
   }
-  const state = await response.json()
+  const state = (await response.json()) as PublicMatch
   if (state.moves !== lastMoves) {
     lastMoves = state.moves
     const last = state.history.at(-1)
@@ -159,10 +160,11 @@ for (;;) {
 const video = page.video()
 await context.close()
 await browser.close()
+if (!video) throw new Error('the context recorded no video')
 const webm = await video.path()
 
 /** Playwright writes WebM; deliver H.264 so it plays inline. */
-await new Promise((done, failed) => {
+await new Promise<void>((done, failed) => {
   const ff = spawn(
     'ffmpeg',
     [
@@ -186,7 +188,7 @@ await new Promise((done, failed) => {
     { stdio: ['ignore', 'ignore', 'pipe'] },
   )
   let err = ''
-  ff.stderr.on('data', (d) => (err += d))
+  ff.stderr?.on('data', (d: Buffer) => (err += d))
   ff.on('exit', (code) => (code === 0 ? done() : failed(new Error(err.slice(-600)))))
 })
 rmSync(webm, { force: true })

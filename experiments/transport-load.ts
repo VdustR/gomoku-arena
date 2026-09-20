@@ -1,35 +1,34 @@
 /**
  * How reliable is each transport under repetition and concurrency?
  *
- * The end-to-end run in transport-stability.mjs is realistic but small: a
+ * The end-to-end run in transport-stability.ts is realistic but small: a
  * hundred turns of zero failures cannot distinguish a 0% failure rate from a
  * 3% one. This drops the model entirely and exercises the two transports
  * directly, which buys thousands of operations in the time a few games took.
  *
- *   node experiments/transport-load.mjs [operations-per-route] [concurrency]
+ *   node experiments/transport-load.ts [operations-per-route] [concurrency]
  *
  * Needs no credentials.
  */
 
-import { Client } from '@modelcontextprotocol/sdk/client/index.js'
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
-import { startServer, stop } from '../test/helpers.mjs'
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { connectMcp, startServer, stop } from '../test/helpers.ts'
+import type { PublicMatch } from '../server/match.ts'
 
 const OPERATIONS = Number(process.argv[2] ?? 2000)
 const CONCURRENCY = Number(process.argv[3] ?? 8)
 
-const { child, base, port } = await startServer()
-const MCP_URL = `http://127.0.0.1:${port}/mcp`
+const { child, base } = await startServer()
 
-const api = async (path, options = {}) => {
+const api = async <T>(path: string, options: RequestInit = {}): Promise<{ status: number; body: T }> => {
   const response = await fetch(`${base}${path}`, {
     headers: { 'content-type': 'application/json' },
     ...options,
   })
-  return { status: response.status, body: await response.json() }
+  return { status: response.status, body: (await response.json()) as T }
 }
 
-const opened = await api('/api/match', {
+const opened = await api<PublicMatch>('/api/match', {
   method: 'POST',
   body: JSON.stringify({
     ruleSet: 'free',
@@ -43,25 +42,42 @@ const MATCH = opened.body.id
  * One read of the position on each transport. Reads are what an agent does
  * most, and unlike a write they can repeat without changing the board, so the
  * two routes stay comparable across thousands of operations.
+ *
+ * `Connection` is whatever that route holds open between reads — an MCP
+ * client, or nothing at all for plain HTTP — so the measuring loop can drive
+ * either without knowing which it has.
  */
-const ROUTES = {
+interface Route<Connection> {
+  label: string
+  open(): Promise<Connection>
+  read(connection: Connection): Promise<void>
+  close(connection: Connection): Promise<void>
+}
+
+const ROUTES: Record<string, Route<unknown>> = {
   mcp: {
     label: 'MCP tools',
     async open() {
-      const client = new Client({ name: 'load', version: '1.0.0' })
-      await client.connect(new StreamableHTTPClientTransport(new URL(MCP_URL)))
-      return client
+      return connectMcp(base, 'load')
     },
-    async read(client) {
+    async read(client: Client) {
       const result = await client.callTool({
         name: 'get_state',
         arguments: { match_id: MATCH, seat: 'black' },
       })
       if (result.isError) throw new Error('tool reported an error')
-      const payload = JSON.parse(result.content[0].text)
+      /*
+       * The SDK types `content` as a union of block kinds, and only the text
+       * block carries `text`. Narrowing rather than asserting keeps a non-text
+       * reply from being read as a successful answer.
+       */
+      const content = Array.isArray(result.content) ? result.content : []
+      const first = content[0]
+      if (!first || first.type !== 'text') throw new Error('tool did not answer with text')
+      const payload = JSON.parse(first.text) as PublicMatch
       if (payload.id !== MATCH) throw new Error('wrong match came back')
     },
-    async close(client) {
+    async close(client: Client) {
       await client.close()
     },
   },
@@ -73,22 +89,22 @@ const ROUTES = {
     async read() {
       const response = await fetch(`${base}/api/match/${MATCH}?seat=black`)
       if (!response.ok) throw new Error(`status ${response.status}`)
-      const payload = await response.json()
+      const payload = (await response.json()) as PublicMatch
       if (payload.id !== MATCH) throw new Error('wrong match came back')
     },
     async close() {},
   },
 }
 
-const percentile = (values, p) => {
+const percentile = (values: number[], p: number): number | null => {
   if (values.length === 0) return null
   const sorted = [...values].sort((a, b) => a - b)
-  return sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))]
+  return sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))] ?? null
 }
 
-async function measure(route, { concurrency }) {
-  const latencies = []
-  const errors = []
+async function measure(route: Route<unknown>, { concurrency }: { concurrency: number }) {
+  const latencies: number[] = []
+  const errors: string[] = []
   let done = 0
   const startedAll = performance.now()
 
@@ -105,7 +121,7 @@ async function measure(route, { concurrency }) {
           await route.read(client)
           latencies.push(performance.now() - started)
         } catch (error) {
-          errors.push(String(error.message))
+          errors.push(error instanceof Error ? error.message : String(error))
         }
       }
     } finally {
@@ -131,7 +147,9 @@ async function measure(route, { concurrency }) {
   }
 }
 
-const report = {}
+type Measurement = Awaited<ReturnType<typeof measure>>
+
+const report: Record<string, Measurement> = {}
 for (const level of [1, CONCURRENCY]) {
   for (const [name, route] of Object.entries(ROUTES)) {
     process.stdout.write(`${name} at concurrency ${level}... `)
@@ -145,11 +163,16 @@ await stop(child)
 console.log(`\n${OPERATIONS} reads per route\n`)
 const header = ['', 'MCP c=1', 'HTTP c=1', `MCP c=${CONCURRENCY}`, `HTTP c=${CONCURRENCY}`]
 const keys = ['mcp@1', 'http@1', `mcp@${CONCURRENCY}`, `http@${CONCURRENCY}`]
-const line = (name, get) =>
-  `${name.padEnd(18)} ${keys.map((k) => String(get(report[k])).padStart(12)).join('')}`
+const line = (name: string, get: (r: Measurement) => unknown): string => {
+  const cells = keys.map((key) => {
+    const data = report[key]
+    return String(data ? get(data) : '-').padStart(12)
+  })
+  return `${name.padEnd(18)} ${cells.join('')}`
+}
 
 console.log(
-  `${header[0].padEnd(18)} ${header
+  `${(header[0] ?? '').padEnd(18)} ${header
     .slice(1)
     .map((h) => h.padStart(12))
     .join('')}`,

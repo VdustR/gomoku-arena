@@ -34,11 +34,15 @@
     "allowImportingTsExtensions": true,
 
     /*
-     * The conversion is finished, so `allowJs` and `checkJs` are gone: every
-     * module under `src/` and `server/` is TypeScript. What remains in
-     * JavaScript is `svelte.config.js`, which Svelte loads itself, and the
-     * runnable comparisons under `experiments/`, which are `.mjs` scripts
-     * that spend money and stay out of the suite.
+     * The conversion is finished everywhere, so `allowJs` and `checkJs` are
+     * gone: every module under `src/`, `server/`, `test/`, `experiments/` and
+     * `scripts/` is TypeScript, and all five are in `include` below so all
+     * five are actually checked. They used to be listed there while the files
+     * were `.mjs`, which meant `include` named four directories it silently
+     * did nothing for.
+     *
+     * What remains in JavaScript is `svelte.config.js`, which Svelte loads
+     * itself.
      */
     "skipLibCheck": true
   },

@@ -1,17 +1,19 @@
 /**
  * Print a finished match as something a person can read.
  *
- *   node experiments/match-report.mjs <match-id>
+ *   node experiments/match-report.ts <match-id>
  *
  * Thinking time is the only figure measured the same way for every player, so
  * it leads. Everything under a move's metrics is whatever that player could
  * account for, and carries the source that produced it.
  */
 
+import type { Review, ReviewSide } from '../server/match.ts'
+
 const MATCH = process.argv[2]
-const BASE = process.env.GOMOKU_URL ?? 'http://localhost:5273'
+const BASE = process.env['GOMOKU_URL'] ?? 'http://localhost:5273'
 if (!MATCH) {
-  console.error('usage: node experiments/match-report.mjs <match-id>')
+  console.error('usage: node experiments/match-report.ts <match-id>')
   process.exit(2)
 }
 
@@ -20,11 +22,12 @@ if (!response.ok) {
   console.error(`could not read the review: ${response.status}`)
   process.exit(1)
 }
-const review = await response.json()
+const review = (await response.json()) as Review
 
-const ms = (value) => (value == null ? '—' : value < 1000 ? `${value}ms` : `${(value / 1000).toFixed(1)}s`)
+const ms = (value: number | null | undefined): string =>
+  value == null ? '—' : value < 1000 ? `${value}ms` : `${(value / 1000).toFixed(1)}s`
 
-const label = (side) => side.player.label ?? side.player.kind
+const label = (side: ReviewSide): string => side.player.label ?? side.player.kind
 
 console.log(`\n${label(review.sides.black)}  vs  ${label(review.sides.white)}`)
 console.log(`${review.ruleSet} · ${review.moves.length} moves · ${ms(review.durationMs)}`)
@@ -43,7 +46,12 @@ for (const move of review.moves) {
 }
 
 console.log('\nper side')
-const rows = [
+/**
+ * The getters return whatever the field holds — a count, a formatted duration,
+ * or a metric the player reported — and every one of them is printed through
+ * `String`, so `unknown` is the honest type rather than a union invented here.
+ */
+const rows: [string, (side: ReviewSide) => unknown][] = [
   ['moves', (s) => s.moves],
   ['total thinking', (s) => ms(s.thinking.totalMs)],
   ['median', (s) => ms(s.thinking.medianMs)],
@@ -51,7 +59,7 @@ const rows = [
   ['fastest', (s) => ms(s.thinking.fastestMs)],
   ['refused', (s) => s.rejected],
 ]
-const keys = new Set()
+const keys = new Set<string>()
 for (const side of [review.sides.black, review.sides.white]) {
   for (const key of Object.keys(side.metrics ?? {})) if (key !== 'sources') keys.add(key)
 }

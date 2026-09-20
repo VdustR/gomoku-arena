@@ -96,6 +96,6 @@ every visitor downloads.
 ## Before you call it done
 
 `pnpm test` covers the rules, the engines, reply parsing, the review, the relay
-and MCP. A new engine belongs in `test/engines.test.mjs`, which holds every
+and MCP. A new engine belongs in `test/engines.test.ts`, which holds every
 engine to the same three promises: take a win, block a loss, and never offer a
 move the board would refuse.

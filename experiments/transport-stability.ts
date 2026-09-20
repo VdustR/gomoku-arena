@@ -17,40 +17,86 @@
  * counting turns or tokens then measures the game, not the plumbing. What is
  * comparable is the cost and failure rate of one read and one write.
  *
- *   node experiments/transport-stability.mjs [games-per-route]
+ *   node experiments/transport-stability.ts [games-per-route]
  *
  * Needs TYPESAFE_API_KEY. Runs against a server it starts itself.
  */
 
-import { Client } from '@modelcontextprotocol/sdk/client/index.js'
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
-import { startServer, stop } from '../test/helpers.mjs'
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { connectMcp, startServer, stop } from '../test/helpers.ts'
+import type { Candidate, NewMatch, PublicMatch } from '../server/match.ts'
 
 const GAMES = Number(process.argv[2] ?? 5)
 const MAX_PLIES = 120
-const KEY = process.env.TYPESAFE_API_KEY
+const KEY = process.env['TYPESAFE_API_KEY'] ?? ''
 if (!KEY) {
   console.error('TYPESAFE_API_KEY is not set. Run through envctl.')
   process.exit(2)
 }
 
-const { child, base, port } = await startServer()
-const MCP_URL = `http://127.0.0.1:${port}/mcp`
+const { child, base } = await startServer()
 
-const api = async (path, options = {}) => {
+const api = async <T>(path: string, options: RequestInit = {}): Promise<{ status: number; body: T }> => {
   const response = await fetch(`${base}${path}`, {
     headers: { 'content-type': 'application/json' },
     ...options,
   })
-  return { status: response.status, body: await response.json() }
+  return { status: response.status, body: (await response.json()) as T }
+}
+
+/**
+ * A refusal as the server writes one, on either route. It is not the shape
+ * the success type describes, so it is named separately and read alongside it.
+ */
+interface ApiRefusal {
+  error?: string
+  message?: string
+}
+
+/**
+ * An Error carrying the server's refusal code, so a turn refused by the rules
+ * can be told apart from the transport falling over.
+ */
+class RouteError extends Error {
+  code: string | undefined
+
+  constructor(message: string, code: string | undefined) {
+    super(message)
+    this.code = code
+  }
+}
+
+/** What the relay hands back for a Jev call: its own envelope, then the body. */
+interface JevEnvelope {
+  ok: boolean
+  status: number
+  body?: {
+    error?: string
+    answers?: { move?: { choice?: string; confidence?: number | null } }
+    usage?: { input_tokens?: number }
+  }
+}
+
+interface Decision {
+  point: string
+  confidence: number | null
+  usage: { input_tokens?: number }
+  decidedInMs: number
 }
 
 /** One Jev decision over the candidate points. Identical on both routes. */
-async function askJev(state, candidates) {
-  const criteria = {}
+async function askJev(
+  state: { board: string; you_play: string; rule_set: string },
+  candidates: Candidate[],
+): Promise<Decision> {
+  const criteria: Record<string, string> = {}
   for (const move of candidates) criteria[move.point] = move.rationale ?? 'a legal point'
+  // The shortlist is never empty by the time this is called; saying so here is
+  // what lets the fallback point be read without an assertion.
+  const fallback = candidates[0]
+  if (!fallback) throw new Error('no candidates to choose from')
   const started = performance.now()
-  const relayed = await api('/api/jev', {
+  const relayed = await api<JevEnvelope>('/api/jev', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-provider-key': KEY },
     body: JSON.stringify({
@@ -71,85 +117,126 @@ async function askJev(state, candidates) {
   })
   const decidedInMs = Math.round(performance.now() - started)
   if (!relayed.body.ok) throw new Error(relayed.body.body?.error ?? 'jev call failed')
-  const answer = relayed.body.body.answers?.move
+  const answer = relayed.body.body?.answers?.move
   return {
-    point: answer?.choice ?? candidates[0].point,
+    point: answer?.choice ?? fallback.point,
     confidence: answer?.confidence ?? null,
-    usage: relayed.body.body.usage ?? {},
+    usage: relayed.body.body?.usage ?? {},
     decidedInMs,
   }
 }
 
 /** Reading the position and playing a move, once per transport. */
-const ROUTES = {
-  http: {
-    label: 'plain HTTP API',
-    async open(seats) {
-      const created = await api('/api/match', { method: 'POST', body: JSON.stringify(seats) })
-      if (created.status !== 201) throw new Error(`could not open a match: ${created.status}`)
-      return created.body.id
-    },
-    async read(id) {
-      const got = await api(`/api/match/${id}?seat=black`)
-      if (got.status !== 200) throw new Error(`read failed: ${got.status}`)
-      return got.body
-    },
-    async play(id, point, extra) {
-      const result = await api(`/api/match/${id}/play`, {
-        method: 'POST',
-        body: JSON.stringify({ seat: 'black', point, ...extra }),
-      })
-      if (result.status !== 200) {
-        const error = new Error(result.body.message ?? `play failed: ${result.status}`)
-        error.code = result.body.error
-        throw error
-      }
-      return result.body
-    },
-    async close() {},
-  },
+interface Route {
+  label: string
+  open(seats: NewMatch): Promise<string>
+  read(id: string): Promise<PublicMatch>
+  play(id: string, point: string, extra: { note?: string | undefined }): Promise<unknown>
+  close(): Promise<void>
+}
 
-  mcp: {
-    label: 'MCP tools',
-    client: null,
-    async connect() {
-      this.client = new Client({ name: 'transport-stability', version: '1.0.0' })
-      await this.client.connect(new StreamableHTTPClientTransport(new URL(MCP_URL)))
-    },
-    async call(tool, args) {
-      const result = await this.client.callTool({ name: tool, arguments: args })
-      const payload = JSON.parse(result.content[0].text)
-      if (result.isError) {
-        const error = new Error(payload.message ?? `${tool} failed`)
-        error.code = payload.error
-        throw error
-      }
-      return payload
-    },
-    async open(seats) {
-      if (!this.client) await this.connect()
-      const opened = await this.call('new_match', {
-        rule_set: seats.ruleSet,
-        black: seats.black,
-        white: seats.white,
-      })
-      return opened.id
-    },
-    async read(id) {
-      return this.call('get_state', { match_id: id, seat: 'black', candidates: true })
-    },
-    async play(id, point, extra) {
-      return this.call('play', { match_id: id, seat: 'black', point, note: extra.note ?? undefined })
-    },
-    async close() {
-      await this.client?.close()
-      this.client = null
-    },
+/** The MCP route also holds the connection it reads and writes over. */
+interface McpRoute extends Route {
+  client: Client | null
+  connect(): Promise<void>
+  call<T>(tool: string, args: Record<string, unknown>): Promise<T>
+}
+
+const httpRoute: Route = {
+  label: 'plain HTTP API',
+  async open(seats) {
+    const created = await api<PublicMatch>('/api/match', { method: 'POST', body: JSON.stringify(seats) })
+    if (created.status !== 201) throw new Error(`could not open a match: ${created.status}`)
+    return created.body.id
+  },
+  async read(id) {
+    const got = await api<PublicMatch>(`/api/match/${id}?seat=black`)
+    if (got.status !== 200) throw new Error(`read failed: ${got.status}`)
+    return got.body
+  },
+  async play(id, point, extra) {
+    const result = await api<PublicMatch & ApiRefusal>(`/api/match/${id}/play`, {
+      method: 'POST',
+      body: JSON.stringify({ seat: 'black', point, ...extra }),
+    })
+    if (result.status !== 200) {
+      throw new RouteError(result.body.message ?? `play failed: ${result.status}`, result.body.error)
+    }
+    return result.body
+  },
+  async close() {},
+}
+
+const mcpRoute: McpRoute = {
+  label: 'MCP tools',
+  client: null,
+  async connect() {
+    this.client = await connectMcp(base, 'transport-stability')
+  },
+  async call<T>(tool: string, args: Record<string, unknown>): Promise<T> {
+    const client = this.client
+    if (!client) throw new Error(`${tool} was called before the client connected`)
+    const result = await client.callTool({ name: tool, arguments: args })
+    /*
+     * The SDK types `content` as a union of block kinds, and only the text
+     * block carries `text`. Narrowing rather than asserting keeps a non-text
+     * reply from being read as an answer.
+     */
+    const content = Array.isArray(result.content) ? result.content : []
+    const first = content[0]
+    if (!first || first.type !== 'text') throw new Error(`${tool} did not answer with text`)
+    const payload = JSON.parse(first.text) as T & ApiRefusal
+    if (result.isError) {
+      throw new RouteError(payload.message ?? `${tool} failed`, payload.error)
+    }
+    return payload
+  },
+  async open(seats) {
+    if (!this.client) await this.connect()
+    const opened = await this.call<PublicMatch>('new_match', {
+      rule_set: seats.ruleSet,
+      black: seats.black,
+      white: seats.white,
+    })
+    return opened.id
+  },
+  async read(id) {
+    return this.call<PublicMatch>('get_state', { match_id: id, seat: 'black', candidates: true })
+  },
+  async play(id, point, extra) {
+    return this.call('play', { match_id: id, seat: 'black', point, note: extra.note ?? undefined })
+  },
+  async close() {
+    await this.client?.close()
+    this.client = null
   },
 }
 
+const ROUTE_NAMES = ['http', 'mcp'] as const
+type RouteName = (typeof ROUTE_NAMES)[number]
+
+const ROUTES: Record<RouteName, Route> = {
+  http: httpRoute,
+  mcp: mcpRoute,
+}
+
 /** Everything that could go wrong on a turn, counted rather than thrown away. */
-const blankTally = () => ({
+interface Tally {
+  games: number
+  completed: number
+  turns: number
+  refused: number
+  transportErrors: number
+  decisionErrors: number
+  readLatencies: number[]
+  writeLatencies: number[]
+  decisionLatencies: number[]
+  inputTokens: number
+  results: string[]
+  errorSamples: string[]
+}
+
+const blankTally = (): Tally => ({
   games: 0,
   completed: 0,
   turns: 0,
@@ -164,13 +251,15 @@ const blankTally = () => ({
   errorSamples: [],
 })
 
-const percentile = (values, p) => {
+const percentile = (values: number[], p: number): number | null => {
   if (values.length === 0) return null
   const sorted = [...values].sort((a, b) => a - b)
-  return sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))]
+  return sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))] ?? null
 }
 
-async function playGame(route, tally) {
+const message = (error: unknown): string => (error instanceof Error ? error.message : String(error))
+
+async function playGame(route: Route, tally: Tally): Promise<string> {
   const id = await route.open({
     ruleSet: 'free',
     black: { kind: 'agent', label: `jev-via-${route === ROUTES.mcp ? 'mcp' : 'http'}`, assist: 'shortlist' },
@@ -179,14 +268,14 @@ async function playGame(route, tally) {
   })
 
   for (let ply = 0; ply < MAX_PLIES; ply += 1) {
-    let state
+    let state: PublicMatch
     const readStarted = performance.now()
     try {
       state = await route.read(id)
       tally.readLatencies.push(Math.round(performance.now() - readStarted))
     } catch (error) {
       tally.transportErrors += 1
-      tally.errorSamples.push(`read: ${error.message}`)
+      tally.errorSamples.push(`read: ${message(error)}`)
       return 'transport-error'
     }
     if (state.status !== 'playing') return state.status
@@ -198,7 +287,7 @@ async function playGame(route, tally) {
        * gives the wrong side's points, and the two routes then play different
        * games for a reason that has nothing to do with transport.
        */
-      const forWhite = await api(`/api/match/${id}?seat=white`)
+      const forWhite = await api<PublicMatch>(`/api/match/${id}?seat=white`)
       const point = forWhite.body.candidates?.[0]?.point
       if (!point) return 'no-move'
       try {
@@ -216,7 +305,7 @@ async function playGame(route, tally) {
     const candidates = state.candidates ?? []
     if (candidates.length === 0) return 'no-move'
 
-    let decision
+    let decision: Decision
     try {
       decision = await askJev(
         { board: state.board.ascii, you_play: 'black', rule_set: state.ruleSummary },
@@ -226,7 +315,7 @@ async function playGame(route, tally) {
       tally.inputTokens += decision.usage.input_tokens ?? 0
     } catch (error) {
       tally.decisionErrors += 1
-      tally.errorSamples.push(`decide: ${error.message}`)
+      tally.errorSamples.push(`decide: ${message(error)}`)
       return 'decision-error'
     }
 
@@ -236,20 +325,41 @@ async function playGame(route, tally) {
       tally.turns += 1
       tally.writeLatencies.push(Math.round(performance.now() - writeStarted))
     } catch (error) {
-      if (error.code === 'illegal_move' || error.code === 'bad_point') {
+      if (error instanceof RouteError && (error.code === 'illegal_move' || error.code === 'bad_point')) {
         tally.refused += 1
         continue
       }
       tally.transportErrors += 1
-      tally.errorSamples.push(`play: ${error.message}`)
+      tally.errorSamples.push(`play: ${message(error)}`)
       return 'transport-error'
     }
   }
   return 'move-limit'
 }
 
-const report = {}
-for (const [name, route] of Object.entries(ROUTES)) {
+interface Latencies {
+  medianMs: number | null
+  p95Ms: number | null
+  maxMs: number | null
+}
+
+/**
+ * The raw latency arrays are dropped once the summary is taken from them: the
+ * report is the thing anyone reads, and thousands of samples in it are noise.
+ */
+interface RouteReport extends Omit<Tally, 'readLatencies' | 'writeLatencies' | 'decisionLatencies'> {
+  label: string
+  read: Latencies
+  write: Latencies
+  decision: { medianMs: number | null }
+  readLatencies: undefined
+  writeLatencies: undefined
+  decisionLatencies: undefined
+}
+
+const report = {} as Record<RouteName, RouteReport>
+for (const name of ROUTE_NAMES) {
+  const route = ROUTES[name]
   const tally = blankTally()
   for (let game = 0; game < GAMES; game += 1) {
     tally.games += 1
@@ -259,7 +369,7 @@ for (const [name, route] of Object.entries(ROUTES)) {
     } catch (error) {
       outcome = 'crashed'
       tally.transportErrors += 1
-      tally.errorSamples.push(`game: ${error.message}`)
+      tally.errorSamples.push(`game: ${message(error)}`)
     }
     tally.results.push(outcome)
     if (outcome === 'win' || outcome === 'draw') tally.completed += 1
@@ -290,7 +400,7 @@ for (const [name, route] of Object.entries(ROUTES)) {
 
 await stop(child)
 
-const row = (name, get) =>
+const row = (name: string, get: (r: RouteReport) => unknown): string =>
   `${name.padEnd(24)} ${String(get(report.mcp)).padStart(14)} ${String(get(report.http)).padStart(14)}`
 
 console.log(`\n${''.padEnd(24)} ${'MCP tools'.padStart(14)} ${'plain HTTP'.padStart(14)}`)
@@ -321,7 +431,8 @@ console.log(row('  max (ms)', (r) => r.write.maxMs ?? '-'))
 console.log('')
 console.log(row('decision median (ms)', (r) => r.decision.medianMs ?? '-'))
 console.log()
-for (const [name, data] of Object.entries(report)) {
+for (const name of ROUTE_NAMES) {
+  const data = report[name]
   if (data.errorSamples.length) console.log(`${name} errors:`, data.errorSamples.slice(0, 5))
 }
 console.log('\noutcomes:', JSON.stringify({ mcp: report.mcp.results, http: report.http.results }))
