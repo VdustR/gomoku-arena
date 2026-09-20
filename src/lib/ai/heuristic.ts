@@ -149,20 +149,44 @@ export interface Candidate {
 }
 
 export interface CandidateOptions {
-  limit?: number
+  /** How many points to offer. `null` caps nothing and offers them all. */
+  limit?: number | null
   size?: number
+  /**
+   * Which empty points are eligible at all.
+   *
+   * `relevant` is every point within reach of a stone, which is what a seat
+   * that is meant to play well should see: the rest of the board is noise.
+   * `board` is every legal point, which is what a seat that is meant to
+   * *measure a model* should see — narrowing the field is itself a decision,
+   * and one the heuristic would otherwise be making on the model's behalf
+   * without appearing anywhere in the record.
+   */
+  scope?: 'relevant' | 'board'
+}
+
+/** Every empty point on the board, in board order. */
+function allPoints(board: Board, size: number): Point[] {
+  const points: Point[] = []
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      if (board[idx(x, y, size)] === EMPTY) points.push([x, y])
+    }
+  }
+  return points
 }
 
 export function candidateMoves(
   board: Board,
   color: Side,
   ruleSet: RuleSetId,
-  { limit = config.candidateLimit, size = SIZE }: CandidateOptions = {},
+  { limit = config.candidateLimit, size = SIZE, scope = 'relevant' }: CandidateOptions = {},
 ): Candidate[] {
   const opponent = other(color)
   const scored: Candidate[] = []
 
-  for (const [x, y] of relevantPoints(board, size)) {
+  const eligible = scope === 'board' ? allPoints(board, size) : relevantPoints(board, size)
+  for (const [x, y] of eligible) {
     const legality = moveLegality(board, x, y, color, ruleSet, size)
     if (!legality.legal) continue
 
@@ -196,11 +220,14 @@ export function candidateMoves(
   // when the shortlist is short.
   const decisive = scored.find((move) => move.attack === 'five')
   const urgent = scored.find((move) => move.defend === 'five')
-  const shortlist = scored.slice(0, limit)
+  // `null` means every scored point, so there is nothing to keep room for.
+  const shortlist = limit == null ? scored : scored.slice(0, limit)
   for (const must of [decisive, urgent]) {
     if (must && !shortlist.includes(must)) shortlist.unshift(must)
   }
-  return shortlist.slice(0, Math.max(limit, 2))
+  // `Math.max(null, 2)` is 2, so an uncapped list has to be returned before
+  // the floor is applied rather than through it.
+  return limit == null ? shortlist : shortlist.slice(0, Math.max(limit, 2))
 }
 
 /** The offline opponent: take the top-scoring candidate. */

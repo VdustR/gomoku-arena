@@ -14,6 +14,7 @@
 import { candidateMoves, describePosition } from './heuristic.ts'
 import type { Candidate, PositionSummary } from './heuristic.ts'
 import { ENGINES } from './engines.ts'
+import { config as buildConfig } from '../config.ts'
 import { BLACK } from '../rules.ts'
 import type { Board, RuleSetId, Side } from '../rules.ts'
 import type {
@@ -71,6 +72,8 @@ export interface ProviderMeta {
   isEngine?: boolean
   source?: { label: string; url: string | null }
   docs: string | null
+  /** What the page does for this seat before the model is asked. */
+  assistance?: Assistance
 }
 
 const message = (error: unknown): string => (error instanceof Error ? error.message : String(error))
@@ -80,6 +83,77 @@ const aborted = (error: unknown): boolean => error instanceof Error && error.nam
 export const BROWSER_ID = 'browser'
 export const JEV_ID = 'jev'
 export const OPENAI_ID = 'openai'
+
+/**
+ * What the page does for a model seat before the model is asked anything.
+ *
+ * Measuring a model and fielding a strong player are different jobs, and the
+ * default profile is tuned for the second. It narrows ~220 legal points to
+ * eight, sorts them by the heuristic's own score, writes what each one does
+ * ("makes an open three and blocks the opponent's four"), and plays the move
+ * itself when a five is available either way. A seat set up like that can post
+ * a full game without the model having contributed a decision — which is
+ * exactly what happened once, undetected, because the record looks identical.
+ *
+ * So the profile is named and attached to the provider rather than left
+ * implicit, and the variants below differ only in this.
+ */
+export interface Assistance {
+  /** How many points the seat may choose between. `null` offers the board. */
+  candidateLimit: number | null
+  /** Whether each point arrives with the heuristic's reading of it. */
+  rationale: boolean
+  /** Whether the page takes or blocks a five without asking the model. */
+  forced: boolean
+  /**
+   * Whether the points are handed over in the heuristic's ranking.
+   *
+   * Order is an answer. Offering the heuristic's favourite first tells the
+   * model which one that is, so a seat meant to measure the model hands them
+   * over in board order and lets the model do the ranking.
+   */
+  ranked: boolean
+}
+
+/** The long-standing behaviour: every aid on. Strongest play, weakest evidence. */
+const AIDED: Assistance = {
+  candidateLimit: buildConfig.candidateLimit,
+  rationale: true,
+  forced: true,
+  ranked: true,
+}
+
+/** The heuristic picks the field; the model reads it and ranks it. */
+const SHORTLISTED: Assistance = {
+  candidateLimit: buildConfig.candidateLimit,
+  rationale: false,
+  forced: false,
+  ranked: false,
+}
+
+/** Every legal point, no reading, no shortcut. The model or nothing. */
+const UNAIDED: Assistance = { candidateLimit: null, rationale: false, forced: false, ranked: false }
+
+export const JEV_SHORTLISTED_ID = 'jev-shortlisted'
+export const JEV_UNAIDED_ID = 'jev-unaided'
+export const BROWSER_SHORTLISTED_ID = 'browser-shortlisted'
+export const BROWSER_UNAIDED_ID = 'browser-unaided'
+
+/**
+ * Which adapter, key and endpoint a variant belongs to. A variant changes what
+ * the page does around the model, never which model it is.
+ */
+const VARIANT_OF: Record<string, string> = {
+  [JEV_SHORTLISTED_ID]: JEV_ID,
+  [JEV_UNAIDED_ID]: JEV_ID,
+  [BROWSER_SHORTLISTED_ID]: BROWSER_ID,
+  [BROWSER_UNAIDED_ID]: BROWSER_ID,
+}
+
+/** The provider a variant is a variant of, or the id itself. */
+export const baseProviderOf = (provider: string): string => VARIANT_OF[provider] ?? provider
+
+export const assistanceFor = (provider: string): Assistance => PROVIDERS[provider]?.assistance ?? AIDED
 /** Engines that are only code. Their ids are the keys of ENGINES. */
 export const ENGINE_IDS = Object.keys(ENGINES)
 export const DEFAULT_ENGINE_ID = 'greedy'
@@ -115,6 +189,48 @@ export const PROVIDERS: Record<string, ProviderMeta> = {
     needsKey: true,
     keyHint: 'console.typesafe.ai, or whatever your own endpoint expects',
     docs: 'https://docs.typesafe.ai/api',
+  },
+  [JEV_SHORTLISTED_ID]: {
+    id: JEV_SHORTLISTED_ID,
+    group: 'model',
+    note: 'needs a key',
+    name: 'Jev — shortlisted',
+    tagline: 'The heuristic picks eight points. The model reads them itself and ranks them.',
+    needsKey: true,
+    keyHint: 'console.typesafe.ai, or whatever your own endpoint expects',
+    docs: 'https://docs.typesafe.ai/api',
+    assistance: SHORTLISTED,
+  },
+  [JEV_UNAIDED_ID]: {
+    id: JEV_UNAIDED_ID,
+    group: 'model',
+    note: 'needs a key',
+    name: 'Jev — unaided',
+    tagline: 'Every legal point, no reading of them, no shortcut. What the model can do alone.',
+    needsKey: true,
+    keyHint: 'console.typesafe.ai, or whatever your own endpoint expects',
+    docs: 'https://docs.typesafe.ai/api',
+    assistance: UNAIDED,
+  },
+  [BROWSER_SHORTLISTED_ID]: {
+    id: BROWSER_SHORTLISTED_ID,
+    group: 'model',
+    note: 'on-device, no key',
+    name: 'Chrome built-in — shortlisted',
+    tagline: 'The heuristic picks eight points. The model reads them itself and ranks them.',
+    needsKey: false,
+    docs: 'https://developer.chrome.com/docs/ai/prompt-api',
+    assistance: SHORTLISTED,
+  },
+  [BROWSER_UNAIDED_ID]: {
+    id: BROWSER_UNAIDED_ID,
+    group: 'model',
+    note: 'on-device, no key',
+    name: 'Chrome built-in — unaided',
+    tagline: 'Every legal point, no reading of them, no shortcut. Needs a context this model may not have.',
+    needsKey: false,
+    docs: 'https://developer.chrome.com/docs/ai/prompt-api',
+    assistance: UNAIDED,
   },
   [OPENAI_ID]: {
     id: OPENAI_ID,
@@ -557,14 +673,32 @@ export async function chooseMove({
     return { ...engineMove({ board, color, ruleSet, provider, options }), candidates: [] }
   }
 
-  const candidates = candidateMoves(board, color, ruleSet)
-  if (candidates.length === 0) return { move: null, candidates, latencyMs: 0, telemetry: null }
+  const aid = assistanceFor(provider)
+  const scored = candidateMoves(board, color, ruleSet, {
+    limit: aid.candidateLimit,
+    scope: aid.candidateLimit == null ? 'board' : 'relevant',
+  })
+  if (scored.length === 0) return { move: null, candidates: scored, latencyMs: 0, telemetry: null }
+
+  /*
+   * Strip what this profile does not grant. The rationale is the heuristic's
+   * reading of the point, and handing it over is handing over the tactics; the
+   * ranking is carried by the order, so an unranked profile is shuffled back
+   * into board order rather than merely re-sorted by score.
+   */
+  const candidates = aid.rationale ? scored : scored.map((c) => ({ ...c, rationale: '' }))
+  if (!aid.ranked) candidates.sort((a, b) => a.y - b.y || a.x - b.x)
 
   const position = describePosition(board, color, ruleSet)
   const args: ModelRequest = { position, candidates, key, config, signal }
 
   // A decisive move is not worth a round trip: take the win, block the loss.
-  const forced = candidates.find((c) => c.attack === 'five') ?? candidates.find((c) => c.defend === 'five')
+  // A profile that does not grant it asks the model even here, which is the
+  // whole point of that profile: 55 of 58 shortcuts taken in one tournament
+  // were blocks, so this is where a model's defence is usually hidden.
+  const forced = aid.forced
+    ? (candidates.find((c) => c.attack === 'five') ?? candidates.find((c) => c.defend === 'five'))
+    : undefined
   if (forced) {
     return {
       move: forced,
@@ -580,7 +714,8 @@ export async function chooseMove({
     }
   }
 
-  const run = provider === BROWSER_ID ? browserMove : provider === JEV_ID ? jevMove : openaiMove
+  const base = baseProviderOf(provider)
+  const run = base === BROWSER_ID ? browserMove : base === JEV_ID ? jevMove : openaiMove
 
   const result = await run(args)
   return { ...result, candidates }
