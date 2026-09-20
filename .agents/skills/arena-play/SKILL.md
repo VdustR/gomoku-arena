@@ -12,8 +12,10 @@ pnpm start` for the built page. Either way the MCP endpoint is
 server binds `[::1]` only.
 
 `pnpm dev:named` runs the same server behind portless, which drops the port and
-the spelling problem with it: the endpoint becomes `<scheme>://gomoku.localhost/mcp`.
-The proxy has to be started once, and that needs sudo to bind a privileged port:
+the spelling problem with it. **Take the endpoint from what the server prints,
+not from a name you expect**: portless prefixes the host on a branch — on
+`feat/portless` it was `portless.gomoku.localhost` — and falls back to port 1355
+when it cannot bind a privileged one. The proxy has to be started once:
 
 ```sh
 portless proxy start            # https://gomoku.localhost
@@ -29,8 +31,8 @@ Register the endpoint once:
 
 ```sh
 claude mcp add --transport http gomoku http://localhost:5273/mcp
-# behind portless, whichever scheme its proxy is running:
-claude mcp add --transport http gomoku https://gomoku.localhost/mcp
+# behind portless, using the URL it printed:
+claude mcp add --transport http gomoku https://portless.gomoku.localhost:1355/mcp
 ```
 
 ```toml

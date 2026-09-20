@@ -15,8 +15,9 @@ pnpm install && pnpm dev
 ```
 
 Or run it behind portless, which replaces the port with a name and takes that
-spelling problem with it. The endpoint becomes `<scheme>://gomoku.localhost/mcp`,
-and the server prints which scheme it got:
+spelling problem with it. Read the endpoint from what the server prints — the
+host carries a prefix on a branch, and the scheme depends on how the proxy was
+started:
 
 ```sh
 portless proxy start   # once, needs sudo; add --no-tls for plain http

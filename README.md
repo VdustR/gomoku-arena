@@ -219,10 +219,14 @@ portless proxy start   # once. Needs sudo to bind a privileged port.
 pnpm dev:named         # -> https://gomoku.localhost
 ```
 
+**Read the URL it prints rather than assuming one.** `portless.json` pins the
+name to `gomoku`, but portless prefixes it on a branch — on `feat/portless` the
+host is `portless.gomoku.localhost`, and without sudo the proxy falls back to
+port 1355. That is why nothing here hardcodes the host: `PORTLESS_URL` carries
+the whole URL, the server prints what it is actually reachable at, and
+`scripts/mcp-cli.mjs` follows it.
+
 `portless proxy start --no-tls` serves the same thing over plain http instead.
-Either way `PORTLESS_URL` carries the scheme, the server prints the URL it is
-actually reachable at, and `scripts/mcp-cli.mjs` follows it. `portless.json`
-pins the name to `gomoku` so it does not drift with the directory.
 
 Over HTTPS a client must trust the CA portless generated on first run. Node
 honours the system trust store by default, so on a machine where `portless
