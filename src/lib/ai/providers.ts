@@ -115,14 +115,6 @@ export interface Assistance {
   ranked: boolean
 }
 
-/** The long-standing behaviour: every aid on. Strongest play, weakest evidence. */
-const AIDED: Assistance = {
-  candidateLimit: buildConfig.candidateLimit,
-  rationale: true,
-  forced: true,
-  ranked: true,
-}
-
 /** The heuristic picks the field; the model reads it and ranks it. */
 const SHORTLISTED: Assistance = {
   candidateLimit: buildConfig.candidateLimit,
@@ -153,7 +145,13 @@ const VARIANT_OF: Record<string, string> = {
 /** The provider a variant is a variant of, or the id itself. */
 export const baseProviderOf = (provider: string): string => VARIANT_OF[provider] ?? provider
 
-export const assistanceFor = (provider: string): Assistance => PROVIDERS[provider]?.assistance ?? AIDED
+/*
+ * Every model seat declares its own profile. The fallback is the shortlisted
+ * one rather than "every aid on": a seat that reached here without declaring
+ * anything should not silently get the level this project removed for being
+ * unable to tell a model from the heuristic feeding it.
+ */
+export const assistanceFor = (provider: string): Assistance => PROVIDERS[provider]?.assistance ?? SHORTLISTED
 /** Engines that are only code. Their ids are the keys of ENGINES. */
 export const ENGINE_IDS = Object.keys(ENGINES)
 export const DEFAULT_ENGINE_ID = 'greedy'
@@ -171,25 +169,6 @@ export const PROVIDER_GROUPS: Record<'seat' | 'search' | 'model', { id: string; 
 }
 
 export const PROVIDERS: Record<string, ProviderMeta> = {
-  [BROWSER_ID]: {
-    id: BROWSER_ID,
-    group: 'model',
-    note: 'on-device, no key',
-    name: 'Chrome built-in AI',
-    tagline: 'On-device Gemini Nano. No key, no network, no cost.',
-    needsKey: false,
-    docs: 'https://developer.chrome.com/docs/ai/prompt-api',
-  },
-  [JEV_ID]: {
-    id: JEV_ID,
-    group: 'model',
-    note: 'needs a key',
-    name: 'Jev-compatible',
-    tagline: 'A typed decision with a probability for every candidate. TypeSafe, or your own server.',
-    needsKey: true,
-    keyHint: 'console.typesafe.ai, or whatever your own endpoint expects',
-    docs: 'https://docs.typesafe.ai/api',
-  },
   [JEV_SHORTLISTED_ID]: {
     id: JEV_SHORTLISTED_ID,
     group: 'model',
@@ -241,6 +220,7 @@ export const PROVIDERS: Record<string, ProviderMeta> = {
     needsKey: true,
     keyHint: 'your provider’s dashboard',
     docs: 'https://platform.openai.com/docs/api-reference/chat',
+    assistance: SHORTLISTED,
   },
   ...Object.fromEntries(
     Object.values(ENGINES).map((engine) => [

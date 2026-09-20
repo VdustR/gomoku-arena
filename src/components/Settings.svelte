@@ -64,7 +64,7 @@
 
     <section>
       <div class="head">
-        <h3>{PROVIDERS[JEV_ID]?.name}</h3>
+        <h3>Jev-compatible</h3>
         {#if settings.jevKey}
           <span class="fingerprint tnum">{keyFingerprint(settings.jevKey)}</span>
         {:else if serverCovers(JEV_ID)}
@@ -167,7 +167,7 @@
 
     <section class="browser">
       <div class="head">
-        <h3>{PROVIDERS['browser']?.name}</h3>
+        <h3>Chrome built-in AI</h3>
         <span class:ready={browserModel?.ready} class:absent={!browserModel?.supported} class="state">
           {browserModel?.state ?? 'checking'}
         </span>
