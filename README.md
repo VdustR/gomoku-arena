@@ -215,7 +215,7 @@ endpoint is something agents are told once and keep, and the `localhost` /
 both.
 
 ```sh
-portless proxy start   # once. Needs sudo to bind a privileged port.
+pnpm exec portless proxy start   # once. Needs sudo to bind a privileged port.
 pnpm dev:named         # -> https://gomoku.localhost
 ```
 
@@ -226,11 +226,16 @@ port 1355. That is why nothing here hardcodes the host: `PORTLESS_URL` carries
 the whole URL, the server prints what it is actually reachable at, and
 `scripts/mcp-cli.mjs` follows it.
 
-`portless proxy start --no-tls` serves the same thing over plain http instead.
+`pnpm exec portless proxy start --no-tls` serves the same thing over plain http instead.
+
+`pnpm exec` rather than a bare `portless`: the proxy and `pnpm dev:named` have
+to be the same build, and portless is a devDependency here so a clean checkout
+needs nothing installed globally. A global install would otherwise start the
+proxy while the project ran its own copy against it.
 
 Over HTTPS a client must trust the CA portless generated on first run. Node
-honours the system trust store by default, so on a machine where `portless
-trust` has run this needs nothing; where a client does not, give it the CA
+honours the system trust store by default, so on a machine where the CA has
+been trusted this needs nothing; where a client does not, give it the CA
 rather than disabling verification:
 
 ```sh
