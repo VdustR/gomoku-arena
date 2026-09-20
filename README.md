@@ -118,7 +118,7 @@ reach the server could point the base URL at a host they control and collect
 the key. When the server supplies the key it supplies the destination too, and
 the relay refuses to start a request if only one of the pair is set. A key
 typed into the page belongs to whoever typed it, so that request still names
-its own endpoint. `test/relay.test.mjs` holds this behaviour in place.
+its own endpoint. `test/relay.test.ts` holds this behaviour in place.
 
 Even so, anyone who can reach a server configured this way can spend those
 keys. Do not do it on a shared host.
@@ -224,7 +224,7 @@ name to `gomoku`, but portless prefixes it on a branch — on `feat/portless` th
 host is `portless.gomoku.localhost`, and without sudo the proxy falls back to
 port 1355. That is why nothing here hardcodes the host: `PORTLESS_URL` carries
 the whole URL, the server prints what it is actually reachable at, and
-`scripts/mcp-cli.mjs` follows it.
+`scripts/mcp-cli.ts` follows it.
 
 `pnpm exec portless proxy start --no-tls` serves the same thing over plain http instead.
 
@@ -271,16 +271,16 @@ Ten suites, no network needed:
 
 | Suite | Covers |
 | --- | --- |
-| `test/rules.test.mjs` | Five, overline, double four, double three, board edges, both rule sets |
-| `test/config.test.mjs` | Env readers, including that an unset variable falls back rather than parsing as zero |
-| `test/engines.test.mjs` | Each search engine takes a win, blocks a loss, and never offers a forbidden move |
-| `test/providers.test.mjs` | Reading a move index out of whatever a model replied with |
-| `test/review.test.mjs` | What a finished game reports, and which figures keep their source |
-| `test/record.test.mjs` | The stored shape, its version, and what happens to a file that is not it |
-| `test/persistence.test.mjs` | A match replayed from its file alone, across three servers, and what is not written |
-| `test/lifecycle.test.mjs` | What is evicted and what is kept, and a held call answered when the server stops |
-| `test/relay.test.mjs` | Key handling, endpoint pinning, and route ownership, against a live server |
-| `test/mcp.test.mjs` | Two MCP clients on one board, turn waiting, holds, and what stays hidden from an opponent |
+| `test/rules.test.ts` | Five, overline, double four, double three, board edges, both rule sets |
+| `test/config.test.ts` | Env readers, including that an unset variable falls back rather than parsing as zero |
+| `test/engines.test.ts` | Each search engine takes a win, blocks a loss, and never offers a forbidden move |
+| `test/providers.test.ts` | Reading a move index out of whatever a model replied with |
+| `test/review.test.ts` | What a finished game reports, and which figures keep their source |
+| `test/record.test.ts` | The stored shape, its version, and what happens to a file that is not it |
+| `test/persistence.test.ts` | A match replayed from its file alone, across three servers, and what is not written |
+| `test/lifecycle.test.ts` | What is evicted and what is kept, and a held call answered when the server stops |
+| `test/relay.test.ts` | Key handling, endpoint pinning, and route ownership, against a live server |
+| `test/mcp.test.ts` | Two MCP clients on one board, turn waiting, holds, and what stays hidden from an opponent |
 
 ## How a move is chosen
 

@@ -23,7 +23,7 @@ pnpm exec portless proxy start --no-tls   # http://gomoku.localhost
 ```
 
 Whichever you pick, the server prints the URL it is actually reachable at, and
-`scripts/mcp-cli.mjs` follows it without being told. Nothing below changes.
+`scripts/mcp-cli.ts` follows it without being told. Nothing below changes.
 
 ## Taking a seat over MCP
 
@@ -50,12 +50,12 @@ not, point it at the CA rather than turning verification off:
 NODE_EXTRA_CA_CERTS=~/.portless/ca.pem
 ```
 
-`scripts/mcp-cli.mjs` calls one tool from a shell, which is the quickest way to
+`scripts/mcp-cli.ts` calls one tool from a shell, which is the quickest way to
 check the server or drive a seat by hand:
 
 ```sh
-node scripts/mcp-cli.mjs new_match '{"rule_set":"free","black":{"kind":"agent","label":"me"}}'
-node scripts/mcp-cli.mjs play '{"match_id":"...","seat":"black","point":"H8","note":"centre"}'
+node scripts/mcp-cli.ts new_match '{"rule_set":"free","black":{"kind":"agent","label":"me"}}'
+node scripts/mcp-cli.ts play '{"match_id":"...","seat":"black","point":"H8","note":"centre"}'
 ```
 
 ## The loop that costs least
@@ -64,7 +64,7 @@ One call per move. `play` with `wait_ms` places your stone, waits for the
 opponent, and returns the position you then face:
 
 ```sh
-node scripts/mcp-cli.mjs play '{"match_id":"...","seat":"black","point":"H8","note":"centre","wait_ms":240000}'
+node scripts/mcp-cli.ts play '{"match_id":"...","seat":"black","point":"H8","note":"centre","wait_ms":240000}'
 ```
 
 Without it the loop is `await_turn` → `play` → `get_state`, which costs three
@@ -90,8 +90,8 @@ reads `paused`, `play` is refused with `match_paused`, and a wait returns
 straight away instead of pretending a turn is coming.
 
 ```sh
-node scripts/mcp-cli.mjs pause_match '{"match_id":"...","by":"me","note":"back in ten minutes"}'
-node scripts/mcp-cli.mjs pause_match '{"match_id":"...","paused":false}'
+node scripts/mcp-cli.ts pause_match '{"match_id":"...","by":"me","note":"back in ten minutes"}'
+node scripts/mcp-cli.ts pause_match '{"match_id":"...","paused":false}'
 ```
 
 Say why in `note`. Without one, a game waiting for a player who is coming back

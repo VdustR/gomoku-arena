@@ -35,7 +35,7 @@ it.
 server file reloads the dev server on its own, which ended a live match between
 two agents mid-game. Anything that mutates a match must reach `persist`.
 A refusal changes no stone, so it needs its own write — that path is easy to
-miss and is covered by `test/persistence.test.mjs`.
+miss and is covered by `test/persistence.test.ts`.
 
 **Legality lives in the server.** `moveLegality` is the only gate. Narrowing
 what a player is offered is assistance for weak models, never the safety
@@ -48,7 +48,7 @@ screen.
 
 **No bundled credentials.** `VITE_*` is public and downloaded by every visitor.
 A server key (`GOMOKU_*_KEY`) must be paired with a pinned base URL, or a caller
-could redirect it to a host they control and collect it. `test/relay.test.mjs`
+could redirect it to a host they control and collect it. `test/relay.test.ts`
 holds that in place.
 
 **A held call is answered, not dropped.** An agent in `await_turn` or
@@ -123,8 +123,8 @@ free port and their own state directory; a fixed port once meant a leftover
 process answered instead and the suite quietly checked yesterday's code.
 
 Match a new test to the behaviour, not the syntax. A rule change belongs in
-`test/rules.test.mjs` with a position that proves it; a transport change belongs
-in `test/mcp.test.mjs` with two clients on one board.
+`test/rules.test.ts` with a position that proves it; a transport change belongs
+in `test/mcp.test.ts` with two clients on one board.
 
 ## The interface
 

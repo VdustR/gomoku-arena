@@ -75,8 +75,8 @@ through the relay because those endpoints refuse browser origins.
 
 ## Evidence on Hand
 
-- `test/rules.test.mjs` — 14 assertions covering both rule sets, run with
-  `node test/rules.test.mjs`.
+- `test/rules.test.ts` — 14 assertions covering both rule sets, run with
+  `pnpm test`.
 - Relay verified end to end against `jev-1.13.0` through `pnpm start`:
   HTTP 200, 710 ms, real probabilities returned.
 - `/api/jev` verified against both a hosted base URL (TypeSafe, 736 ms) and a
