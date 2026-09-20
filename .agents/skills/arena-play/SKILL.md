@@ -18,8 +18,8 @@ not from a name you expect**: portless prefixes the host on a branch — on
 when it cannot bind a privileged one. The proxy has to be started once:
 
 ```sh
-portless proxy start            # https://gomoku.localhost
-portless proxy start --no-tls   # http://gomoku.localhost
+pnpm exec portless proxy start            # https://gomoku.localhost
+pnpm exec portless proxy start --no-tls   # http://gomoku.localhost
 ```
 
 Whichever you pick, the server prints the URL it is actually reachable at, and
@@ -43,7 +43,7 @@ url = "http://localhost:5273/mcp"
 
 Over HTTPS a client has to trust the CA portless generated. Node has honoured
 the system trust store since it began defaulting to `--use-system-ca`, so on a
-machine where `portless trust` has run this needs nothing. Where a client does
+machine where the CA has been trusted this needs nothing. Where a client does
 not, point it at the CA rather than turning verification off:
 
 ```sh

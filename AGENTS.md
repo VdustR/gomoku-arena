@@ -20,7 +20,7 @@ host carries a prefix on a branch, and the scheme depends on how the proxy was
 started:
 
 ```sh
-portless proxy start   # once, needs sudo; add --no-tls for plain http
+pnpm exec portless proxy start   # once, needs sudo; add --no-tls for plain http
 pnpm dev:named
 ```
 
