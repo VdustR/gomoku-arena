@@ -14,7 +14,7 @@
  */
 
 import { EMPTY, BLACK, WHITE, SIZE, idx } from '../src/lib/rules.ts'
-import type { Board, Side } from '../src/lib/rules.ts'
+import type { Board } from '../src/lib/rules.ts'
 import { candidateMoves } from '../src/lib/ai/heuristic.ts'
 import { assistanceFor } from '../src/lib/ai/providers.ts'
 import type { Review, ReviewMove } from '../server/match.ts'
@@ -118,7 +118,7 @@ function orientationOf(stones: string[]): { orientation: string; lineLength: num
 
 for (const game of played) {
   const review = (await (await fetch(`${BASE}/api/match/${game.id}/review`)).json()) as Review
-  const seats: Record<Side | number, string> = { [BLACK]: game.black, [WHITE]: game.white }
+  const seats: Record<number, string> = { [BLACK]: game.black, [WHITE]: game.white }
   const bySeat = { black: game.black, white: game.white }
 
   for (const side of ['black', 'white'] as const) {
@@ -155,7 +155,8 @@ for (const game of played) {
      */
     const metrics: Record<string, unknown> = move.metrics ?? {}
     if (metrics['model'] === 'forced move') {
-      if (String(metrics['work'] ?? '').includes('Winning move')) t.forcedTake++
+      const work = metrics['work']
+      if (typeof work === 'string' && work.includes('Winning move')) t.forcedTake++
       else t.forcedBlock++
     } else if (id !== 'greedy') {
       const aid = assistanceFor(id)
