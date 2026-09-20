@@ -9,6 +9,7 @@
 
 import { config } from './config.ts'
 import type { ProviderConfig } from './ai/contract.ts'
+import { baseProviderOf } from './ai/providers.ts'
 
 /** What this browser holds. Endpoints have defaults; keys never do. */
 export interface Settings {
@@ -84,17 +85,26 @@ export function keyFingerprint(value: string | null | undefined): string | null 
   return `${value.slice(0, 3)}${'•'.repeat(6)}${value.slice(-4)}`
 }
 
+/*
+ * A variant seat ("jev — unaided") is the same endpoint and the same key as
+ * the provider it varies; only what the page does around it differs. Looking
+ * the key up by the raw seat id would hand a variant an empty string and fail
+ * at the first move with "needs a key" against a key that is sitting right
+ * there.
+ */
 export function keyFor(provider: string): string {
-  if (provider === 'jev') return settings.jevKey.trim()
-  if (provider === 'openai') return settings.openaiKey.trim()
+  const base = baseProviderOf(provider)
+  if (base === 'jev') return settings.jevKey.trim()
+  if (base === 'openai') return settings.openaiKey.trim()
   return ''
 }
 
 export function configFor(provider: string): ProviderConfig {
-  if (provider === 'openai') {
+  const base = baseProviderOf(provider)
+  if (base === 'openai') {
     return { baseUrl: settings.openaiBaseUrl.trim(), model: settings.openaiModel.trim() }
   }
-  if (provider === 'jev') {
+  if (base === 'jev') {
     return { baseUrl: settings.jevBaseUrl.trim(), model: settings.jevModel.trim() }
   }
   return {}

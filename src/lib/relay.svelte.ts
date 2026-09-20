@@ -14,6 +14,7 @@
  */
 
 import type { ProviderCoverage, RelayCapabilities } from '../../server/relay.ts'
+import { baseProviderOf } from './ai/providers.ts'
 
 export interface RelayKeys {
   /** False until the first answer arrives, so nothing is claimed early. */
@@ -40,12 +41,20 @@ export async function loadRelayKeys(): Promise<RelayKeys> {
   return relayKeys
 }
 
+/*
+ * The relay reports coverage per endpoint, and a variant seat shares its
+ * endpoint with the provider it varies. Asking by the raw seat id answers
+ * "no key" for a server that is holding one, which is the same trap `keyFor`
+ * had: the page then refuses to play against a key sitting in its own
+ * environment.
+ */
+
 /** Can the server play this provider without a key from the browser? */
 export function serverCovers(provider: string): boolean {
-  return relayKeys.providers[provider]?.canCover === true
+  return relayKeys.providers[baseProviderOf(provider)]?.canCover === true
 }
 
 /** A server that is half-configured for this provider, and what is missing. */
 export function serverProblem(provider: string): string | null {
-  return relayKeys.providers[provider]?.problem ?? null
+  return relayKeys.providers[baseProviderOf(provider)]?.problem ?? null
 }
