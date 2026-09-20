@@ -31,7 +31,8 @@
     "build": "vp build",
     "start": "node --env-file-if-exists=.env server/index.ts",
     "check": "vp check && svelte-check --threshold error",
-    "test": "node test/rules.test.mjs && node test/config.test.mjs && node test/engines.test.mjs && node test/providers.test.mjs && node test/review.test.mjs && node test/record.test.mjs && node test/persistence.test.mjs && node test/lifecycle.test.mjs && node test/relay.test.mjs && node test/mcp.test.mjs"
+    "test": "vp test run",
+    "test:watch": "vp test watch"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
@@ -45,7 +46,8 @@
     "svelte": "^5.44.0",
     "svelte-check": "^4.7.6",
     "typescript": "^6.0.3",
-    "vite-plus": "^0.3.3"
+    "vite-plus": "^0.3.3",
+    "vitest": "4.1.11"
   },
   "engines": {
     "node": ">=20.6",

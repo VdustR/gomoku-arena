@@ -39,6 +39,19 @@ export default {
    * already being wrapped by hand.
    */
   fmt: { semi: false, singleQuote: true, printWidth: 110 },
+  /*
+   * Vitest is the runner Vite+ already bundles, so the suites need no second
+   * toolchain. `node` rather than a DOM: every suite here drives the rules,
+   * the server or the relay, and the one that touches a browser API stubs it.
+   * The generous timeouts are for the suites that spawn a real server and
+   * wait for it to answer.
+   */
+  test: {
+    environment: 'node',
+    include: ['test/**/*.test.ts'],
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
+  },
   server: {
     /*
      * 5273 is the default, not the rule. Under portless the app is given a
