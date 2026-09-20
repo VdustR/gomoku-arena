@@ -171,7 +171,8 @@ for (const game of played) {
     t.thinking.push(move.thinkingMs)
     const metrics: Record<string, unknown> = move.metrics ?? {}
     if (metrics['model'] === 'forced move') {
-      if (String(metrics['work'] ?? '').includes('Winning move')) t.forcedTake++
+      const work = metrics['work']
+      if (typeof work === 'string' && work.includes('Winning move')) t.forcedTake++
       else t.forcedBlock++
     } else if (!isAgent(id)) {
       const aid = assistanceFor(id)
