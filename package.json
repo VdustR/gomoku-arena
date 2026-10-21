@@ -39,7 +39,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^6.2.1",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@types/node": "^26.6.1",
     "playwright": "^1.63.0",
     "portless": "^0.15.6",
@@ -47,7 +47,7 @@
     "svelte-check": "^4.7.6",
     "typescript": "^6.0.3",
     "vite-plus": "^1.1.0",
-    "vitest": "4.1.11"
+    "vitest": "5.0.5"
   },
   "engines": {
     "node": ">=20.6",
