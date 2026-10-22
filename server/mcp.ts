@@ -114,6 +114,8 @@ export function buildMcpServer() {
   const server = new McpServer(
     { name: 'gomoku-arena', version: '0.1.0' },
     {
+      // Bound validation before Zod walks self-reported metrics or unknown fields.
+      maxToolInputElements: 1024,
       instructions: [
         'A gomoku board two players share. You hold a seat and play stones on it.',
         '',
@@ -383,7 +385,11 @@ export async function handleMcpRequest(
    * rather than loosen the flag for the whole project.
    */
   type TransportOptions = ConstructorParameters<typeof StreamableHTTPServerTransport>[0]
-  const stateless = { sessionIdGenerator: undefined } as unknown as TransportOptions
+  // Ordinary calls carry a point, short notes and small metrics, not board uploads.
+  const stateless = {
+    sessionIdGenerator: undefined,
+    maxRequestBodySize: 64 * 1024,
+  } as unknown as TransportOptions
   const transport = new StreamableHTTPServerTransport(stateless)
   const server = buildMcpServer()
   res.on('close', () => {
