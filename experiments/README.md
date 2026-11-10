@@ -13,8 +13,9 @@ how the position is read and how the move reaches the board.
 node experiments/transport-stability.ts 4
 ```
 
-Needs `TYPESAFE_API_KEY`. Reads and writes are timed separately from the
-decision: a game's length is noise, because two runs diverge after the first
+Needs `TYPESAFE_API_KEY`, which lives in fnox: run it as
+`fnox exec -- node experiments/transport-stability.ts 4`. Reads and writes are
+timed separately from the decision: a game's length is noise, because two runs diverge after the first
 differing move, and counting turns then measures the game rather than the
 plumbing.
 
