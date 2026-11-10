@@ -30,7 +30,9 @@ const GAMES = Number(process.argv[2] ?? 5)
 const MAX_PLIES = 120
 const KEY = process.env['TYPESAFE_API_KEY'] ?? ''
 if (!KEY) {
-  console.error('TYPESAFE_API_KEY is not set. Run through fnox: fnox exec -- node experiments/transport-stability.ts')
+  console.error(
+    'TYPESAFE_API_KEY is not set. Run through fnox: fnox exec -- node experiments/transport-stability.ts',
+  )
   process.exit(2)
 }
 
